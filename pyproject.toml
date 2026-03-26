@@ -10,9 +10,6 @@ license = { file = "LICENSE"}
 requires-python = ">=3.10,<3.15"
 urls = {Repository = "https://github.com/pedrohazevedovm/visual-servoing"}
 
-# --- APAGUE A LISTA 'dependencies = []' DAQUI ---
-# Vamos mover tudo para baixo para evitar o conflito.
-
 [tool.poetry]
 package-mode = false
 

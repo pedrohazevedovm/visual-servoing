@@ -1,3 +1,5 @@
+from skimage.segmentation import slic
+from skimage.color import rgb2lab
 from pathlib import Path
 import cv2
 import torch
@@ -16,6 +18,39 @@ print(f"Rodando em: {device}")
 # Instancia os modelos
 extractor = SuperPoint(max_num_keypoints=2048).eval().to(device)
 matcher = LightGlue(feature="superpoint").eval().to(device)
+
+def apply_slic_to_tensor(image_tensor, n_segments=200, compactness=10):
+    """
+    Aplica SLIC e reconstrói a imagem usando média por superpixel.
+
+    image_tensor: (C, H, W) em [0,1]
+    """
+
+    # Tensor → numpy (H, W, C)
+    img_np = image_tensor.permute(1, 2, 0).cpu().numpy()
+
+    # SLIC funciona melhor em LAB
+    img_lab = rgb2lab(img_np)
+
+    # Segmentação
+    segments = slic(
+        img_lab,
+        n_segments=n_segments,
+        compactness=compactness,
+        start_label=0
+    )
+
+    # Reconstrução da imagem (média por superpixel)
+    output = np.zeros_like(img_np)
+
+    for seg_val in np.unique(segments):
+        mask = segments == seg_val
+        output[mask] = img_np[mask].mean(axis=0)
+
+    # numpy → tensor
+    output_tensor = torch.from_numpy(output).permute(2, 0, 1).float()
+
+    return output_tensor
 
 
 def apply_meanshift_to_tensor(image_tensor, sp=20, sr=40):
@@ -65,20 +100,20 @@ def run_pipeline(title, img0_tensor, img1_tensor):
 
 # --- EXECUÇÃO ---
 
-# path_ref = Path("src/assets/ref_img.jpeg")
-# path_cur = Path("src/assets/current_img.jpeg")
+path_ref = Path("src/assets/ref_img.jpeg")
+path_cur = Path("src/assets/current_img.jpeg")
 # #
-path_ref = Path("src/assets/vaso_1.jpeg")
-path_cur = Path("src/assets/vaso_2.jpeg")
+# path_ref = Path("src/assets/vaso_1.jpeg")
+# path_cur = Path("src/assets/vaso_2.jpeg")
 try:
     ref_tensor_orig = load_image(path_ref)
     cur_tensor_orig = load_image(path_cur)
 
     scenarios = [
-        ("Original (Sem Mean Shift)", None),
-        ("MeanShift (sp=20, sr=40)", (20, 40)),
-        ("MeanShift (sp=40, sr=60)", (40, 60)),
-        ("MeanShift (sp=60, sr=80)", (60, 80))
+        ("Original (Sem SLIC)", None),
+        # ("SLIC (n=200, c=10)", (200, 10)),
+        # ("SLIC (n=400, c=15)", (300, 15)),
+        ("SLIC (n=600, c=20)", (200, 20))
     ]
 
     # 3. Itera sobre os cenários
@@ -90,9 +125,9 @@ try:
             ref_input = ref_tensor_orig
             cur_input = cur_tensor_orig
         else:
-            sp, sr = params
-            ref_input = apply_meanshift_to_tensor(ref_tensor_orig, sp=sp, sr=sr)
-            cur_input = apply_meanshift_to_tensor(cur_tensor_orig, sp=sp, sr=sr)
+            n_segments, compactness = params
+            ref_input = apply_slic_to_tensor(ref_tensor_orig, n_segments=n_segments, compactness=compactness)
+            cur_input = apply_slic_to_tensor(cur_tensor_orig, n_segments=n_segments, compactness=compactness)
 
         # Roda o pipeline
         fig = run_pipeline(title, ref_input, cur_input)
