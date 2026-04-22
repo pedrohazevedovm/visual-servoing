@@ -7,14 +7,14 @@ authors = [
 ]
 readme = "README.md"
 license = { file = "LICENSE"}
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.15"
 urls = {Repository = "https://github.com/pedrohazevedovm/visual-servoing"}
 
 [tool.poetry]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.15"
+python = ">=3.11,<3.15"
 
 # 1. Dependências comuns (movidas lá de cima para cá)
 numpy = "*"
@@ -30,13 +30,16 @@ kornia = ">=0.6.11"
 # 4. PyTorch com CUDA (Fonte Explicita)
 # Dica: Use "*" para versão se você quer pegar a última disponível na URL cu130
 # Ou fixe a versão exata que você viu no site (ex: 2.6.0 ou similar)
-torch = {version = "*", source = "pytorch_gpu"}
-torchvision = {version = "*", source = "pytorch_gpu"}
+torch = {version = ">=2.4.0", source = "pytorch_gpu"}
+torchvision = {version = ">=0.19.0", source = "pytorch_gpu"}
 
 # --- SUA FONTE CUDA ---
+looseversion = "^1.3.0"
+cython = "^3.2.4"
+scikit-image = "^0.26.0"
 [[tool.poetry.source]]
 name = "pytorch_gpu"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cu130"
 # OBS: Se cu130 funcionar, use cu130. Se der erro 404, volte para cu124.
 # O cu124 é garantido de ter binários estáveis para Windows atualmente.
 priority = "explicit"
