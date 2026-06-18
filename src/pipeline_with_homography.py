@@ -61,59 +61,42 @@ def crop_center_tensor(image_tensor, pct_w=0.3, pct_h=0.3):
     cropped_tensor = image_tensor[:, y_start:y_start+crop_h, x_start:x_start+crop_w]
     return cropped_tensor, (x_start, y_start)
 
-# --- NOVA FUNÇÃO: ESTIMATIVA DE HOMOGRAFIA ---
-
 def estimate_homography(pts0, pts1):
-    """
-    Estima a matriz de Homografia robusta usando RANSAC.
-    pts0: pontos da imagem de referência (N, 2) em numpy
-    pts1: pontos da imagem atual (N, 2) em numpy
-    Retorna: Matriz H (3, 3), máscara de inliers e a contagem de inliers válidos.
-    """
     if len(pts0) < 4:
         print("Aviso: Menos de 4 pontos para homografia.")
         return None, None, 0
-    
-    # RANSAC com limiar de 3 pixels para considerar um ponto como correto (inlier)
     H, mask = cv2.findHomography(pts1, pts0, cv2.RANSAC, 3.0)
-    
     inliers_count = int(np.sum(mask)) if mask is not None else 0
     return H, mask, inliers_count
 
-# --- PIPELINE ATUALIZADO ---
+# --- PIPELINE ATUALIZADO (Plota Duas Formas Simultaneamente) ---
 
-def run_pipeline_with_homography(img0_orig, img1_orig, title, use_roi=True, pct_w=0.3, pct_h=0.3):
+def run_pipeline_with_homography(img0_proc, img1_proc, img0_raw, img1_raw, title, use_roi=True, pct_w=0.3, pct_h=0.3):
     """
-    Roda o pipeline completo do LightGlue com estimativa de homografia por RANSAC.
-    
-    use_roi (bool): Se True, restringe a extração de features à região central definida.
-                    Se False, processa as imagens em tamanho original completo.
+    Roda o pipeline do LightGlue e Homografia uma única vez, mas gera e retorna 
+    duas figuras distintas: uma sobre o background de superpixels e outra sobre o background cru.
     """
-    # 1. Definição da Região de Busca (Com ROI ou Imagem Completa)
+    # 1. Definição da Região de Busca baseada nos Tensores Processados (Boruvka)
     if use_roi:
-        # Aplica o Crop Central (ROI) e armazena os offsets de translação
-        img0_proc, offset0 = crop_center_tensor(img0_orig, pct_w, pct_h)
-        img1_proc, offset1 = crop_center_tensor(img1_orig, pct_w, pct_h)
+        img0_search, offset0 = crop_center_tensor(img0_proc, pct_w, pct_h)
+        img1_search, offset1 = crop_center_tensor(img1_proc, pct_w, pct_h)
     else:
-        # Usa as imagens originais inteiras (offsets zerados)
-        img0_proc, offset0 = img0_orig, (0, 0)
-        img1_proc, offset1 = img1_orig, (0, 0)
+        img0_search, offset0 = img0_proc, (0, 0)
+        img1_search, offset1 = img1_proc, (0, 0)
     
-    # 2. Extração de Features (na ROI ou na Imagem Cheia)
-    feats0 = extractor.extract(img0_proc.to(device))
-    feats1 = extractor.extract(img1_proc.to(device))
+    # 2. Extração de Features na Região dos Superpixels
+    feats0 = extractor.extract(img0_search.to(device))
+    feats1 = extractor.extract(img1_search.to(device))
 
     # 3. Matching Adaptativo LightGlue
     matches0 = matcher({"image0": feats0, "image1": feats1, "filter_threshold": 0.1})
     
-    # Tratamento seguro se 'stop' for int (CPU) ou Tensor (GPU)
     if "stop" in matches0:
         stop_val = matches0["stop"]
         stop_layer = stop_val.item() if hasattr(stop_val, "item") else int(stop_val)
     else:
         stop_layer = -1
 
-    # Remove batch dimension
     feats0, feats1, matches0 = [rbd(x) for x in [feats0, feats1, matches0]]
 
     kpts0, kpts1 = feats0["keypoints"], feats1["keypoints"]
@@ -122,75 +105,70 @@ def run_pipeline_with_homography(img0_orig, img1_orig, title, use_roi=True, pct_
     m_kpts0_crop = kpts0[matches[..., 0]]
     m_kpts1_crop = kpts1[matches[..., 1]]
 
-    # 4. Translação de Coordenadas de volta para o Espaço Original (Se use_roi=False, offsets são 0)
+    # 4. Translação de Coordenadas para o Espaço Original (Tamanho total da Imagem)
     offset0_tensor = torch.tensor([offset0[0], offset0[1]], device=m_kpts0_crop.device)
     offset1_tensor = torch.tensor([offset1[0], offset1[1]], device=m_kpts1_crop.device)
     
     m_kpts0_orig = (m_kpts0_crop + offset0_tensor).cpu().numpy()
     m_kpts1_orig = (m_kpts1_crop + offset1_tensor).cpu().numpy()
 
-    # 5. Cálculo da Homografia com RANSAC sobre os pontos convertidos
+    # 5. Cálculo Único da Homografia com RANSAC
     H, mask, inliers = estimate_homography(m_kpts0_orig, m_kpts1_orig)
     
-    # 6. Renderização Visual dos Resultados
-    plt.close('all') 
-    axes = viz2d.plot_images([img0_orig, img1_orig])
-    
-    # Plota apenas os matches considerados válidos (Inliers) pelo RANSAC
-    if mask is not None and len(mask) > 0:
-        inliers_mask = mask.ravel() == 1
-        viz2d.plot_matches(
-            torch.tensor(m_kpts0_orig[inliers_mask]), 
-            torch.tensor(m_kpts1_orig[inliers_mask]), 
-            color="lime", lw=0.3
-        )
-    
-    W0, H0 = img0_orig.shape[2], img0_orig.shape[1]
-
-    # Desenha os delimitadores geométricos na tela se a ROI estiver ativa
-    if use_roi:
-        # Desenha o Retângulo da ROI (Vermelho) na imagem de Referência (Esquerda)
-        rect_roi = plt.Rectangle((offset0[0], offset0[1]), W0*pct_w, H0*pct_h, 
-                                 edgecolor="red", facecolor="none", linestyle="--", linewidth=1.5)
-        plt.gca().add_patch(rect_roi)
-    
-    # Visualização da Homografia: Projeta a região correspondente na Imagem Atual (Direita)
-    if H is not None:
-        if use_roi:
-            # Se usou ROI, projeta o retângulo central deformado
-            cantos_base = np.array([
-                [offset0[0], offset0[1]],
-                [offset0[0] + W0*pct_w, offset0[1]],
-                [offset0[0] + W0*pct_w, offset0[1] + H0*pct_h],
-                [offset0[0], offset0[1] + H0*pct_h]
-            ], dtype=np.float32).reshape(-1, 1, 2)
-        else:
-            # Se não usou ROI, projeta as próprias bordas externas da imagem inteira (0 a W0, 0 a H0)
-            cantos_base = np.array([
-                [0, 0],
-                [W0, 0],
-                [W0, H0],
-                [0, H0]
-            ], dtype=np.float32).reshape(-1, 1, 2)
-        
-        cantos_projetados = cv2.perspectiveTransform(cantos_base, np.linalg.inv(H))
-        cantos_plot = cantos_projetados.squeeze() + np.array([W0, 0])
-        
-        # Desenha o polígono azul mostrando onde a região correspondente foi mapeada
-        polygon = plt.Polygon(cantos_plot, edgecolor="cyan", facecolor="none", linewidth=2.5, linestyle="-")
-        plt.gca().add_patch(polygon)
-
+    W0, H0 = img0_raw.shape[2], img0_raw.shape[1]
     roi_status = "ROI Ativa (30%)" if use_roi else "Imagem Completa"
-    viz2d.add_text(0, f'{title} [{roi_status}]\nMatches Totais: {len(matches)} | Inliers RANSAC: {inliers}\nStop Layer: {stop_layer}', fs=10)
-    fig = plt.gcf()
+    texto_plot = f'{title} [{roi_status}]\nMatches Totais: {len(matches)} | Inliers RANSAC: {inliers}\nStop Layer: {stop_layer}'
+
+    # -------------------------------------------------------------------------
+    # FUNÇÃO INTERNA AUXILIAR PARA EVITAR DUPLICAÇÃO DE DESENHO
+    # -------------------------------------------------------------------------
+    def desenhar_grafico(background_images, sufixo_titulo):
+        plt.figure() # Abre uma nova janela/figura limpa
+        axes = viz2d.plot_images(background_images)
+        
+        if mask is not None and len(mask) > 0:
+            inliers_mask = mask.ravel() == 1
+            viz2d.plot_matches(
+                torch.tensor(m_kpts0_orig[inliers_mask]), 
+                torch.tensor(m_kpts1_orig[inliers_mask]), 
+                color="lime", lw=0.3
+            )
+        
+        if use_roi:
+            rect_roi = plt.Rectangle((offset0[0], offset0[1]), W0*pct_w, H0*pct_h, 
+                                     edgecolor="red", facecolor="none", linestyle="--", linewidth=1.5)
+            plt.gca().add_patch(rect_roi)
+        
+        if H is not None:
+            if use_roi:
+                cantos_base = np.array([
+                    [offset0[0], offset0[1]], [offset0[0] + W0*pct_w, offset0[1]],
+                    [offset0[0] + W0*pct_w, offset0[1] + H0*pct_h], [offset0[0], offset0[1] + H0*pct_h]
+                ], dtype=np.float32).reshape(-1, 1, 2)
+            else:
+                cantos_base = np.array([[0, 0], [W0, 0], [W0, H0], [0, H0]], dtype=np.float32).reshape(-1, 1, 2)
+            
+            cantos_projetados = cv2.perspectiveTransform(cantos_base, np.linalg.inv(H))
+            cantos_plot = cantos_projetados.squeeze() + np.array([W0, 0])
+            
+            polygon = plt.Polygon(cantos_plot, edgecolor="cyan", facecolor="none", linewidth=2.5, linestyle="-")
+            plt.gca().add_patch(polygon)
+
+        viz2d.add_text(0, f"{texto_plot}\nFundo: {sufixo_titulo}", fs=10)
+        return plt.gcf()
+
+    # 6. Gera as duas figuras com backgrounds diferentes usando o mesmo cálculo matemático
+    plt.close('all') 
+    fig_proc = desenhar_grafico([img0_proc, img1_proc], "Superpixels (Boruvka)")
+    fig_raw = desenhar_grafico([img0_raw, img1_raw], "Imagens Cruas (Originais)")
     
-    return fig, len(matches), inliers, stop_layer
+    return fig_proc, fig_raw, len(matches), inliers, stop_layer
 
 
 if __name__ == "__main__":
-    # 1. Carrega as imagens originais
-    path_ref = Path("src/assets/vaso_1.jpeg")
-    path_cur = Path("src/assets/vaso_2.jpeg")
+    # 1. Carrega as imagens originais do disco
+    path_ref = Path("src/assets/ref_img.jpeg")
+    path_cur = Path("src/assets/current_img.jpeg")
     
     if not path_ref.exists() or not path_cur.exists():
         print(f"Erro: Certifique-se de que as imagens existem em 'src/assets/'.")
@@ -199,34 +177,42 @@ if __name__ == "__main__":
     ref_tensor = load_image(path_ref)
     cur_tensor = load_image(path_cur)
 
-    # 2. Aplica as etapas preliminares nas imagens originais
-    # Opcional: Adicionar apply_bilateral_filter se quiser rodar o Fluxo 4 completo
+    # 2. Aplica as etapas preliminares nas imagens
+    cur_hm = match_histogram_tensor(cur_tensor, ref_tensor)
+
     ref_edge = apply_canny_edge(ref_tensor)
-    cur_edge = apply_canny_edge(cur_tensor)
+    cur_edge = apply_canny_edge(cur_hm)
+
+    ref_tensor_bilateral = apply_bilateral_filter(ref_tensor)
+    cur_tensor_bilateral = apply_bilateral_filter(cur_hm)
 
     # 3. Executa a redução por Superpixels do Borůvka (SH)
     print("Processando segmentação por Boruvka...")
-    ref_processada = run_boruvka(ref_tensor, edge_map=ref_edge, n_supix=100)
-    cur_processada = run_boruvka(cur_tensor, edge_map=cur_edge, n_supix=100)
+    ref_processada = run_boruvka(ref_tensor_bilateral, edge_map=ref_edge, n_supix=100)
+    cur_processada = run_boruvka(cur_tensor_bilateral, edge_map=cur_edge, n_supix=100)
 
-    # 4. Alimenta o pipeline com ROI e estimativa de Homografia robusta
-    print("Calculando casamento com LightGlue e estimando Homografia...")
-    fig, total, inliers, stop = run_pipeline_with_homography(
-        img0_orig=ref_processada, 
-        img1_orig=cur_processada, 
+    # 4. Alimenta o pipeline para gerar as duas formas de plotagem
+    print("Calculando casamento com LightGlue e gerando visualizações...")
+    fig_proc, fig_raw, total, inliers, stop = run_pipeline_with_homography(
+        img0_proc=ref_processada,       # Para os cálculos matemáticos
+        img1_proc=cur_processada,       # Para os cálculos matemáticos
+        img0_raw=ref_tensor,            # Para o background original limpo
+        img1_raw=cur_hm,                # Para o background original com HM
         title="Teste Homografia",
-        use_roi=False
+        use_roi=False                   # Defina como True se quiser ativar a ROI central de 30%
     )
 
-    # 5. EXIBIÇÃO E SALVAMENTO DA IMAGEM GERADA
-    # Define o título da janela gráfica
-    fig.canvas.manager.set_window_title("Resultado: Homografia e Rastreamento de ROI")
+    # 5. CONFIGURAÇÃO, SALVAMENTO E EXIBIÇÃO DAS JANELAS
+    fig_proc.canvas.manager.set_window_title("Forma 1: Fundo Reconstruído por Superpixels")
+    fig_raw.canvas.manager.set_window_title("Forma 2: Fundo de Imagens Cruas (Originais)")
     
-    # Salva o arquivo em disco para verificação fora do terminal
-    output_filename = "resultado_homografia_roi.png"
-    fig.savefig(output_filename, bbox_inches="tight", dpi=150)
-    print(f"\n=> Sucesso! Gráfico salvo em alta resolução como: '{output_filename}'")
+    # Salva ambas as imagens de forma independente
+    fig_proc.savefig("resultado_1_superpixels.png", bbox_inches="tight", dpi=150)
+    fig_raw.savefig("resultado_2_imagens_cruas.png", bbox_inches="tight", dpi=150)
+    print("\n=> Sucesso! Foram salvos dois ficheiros no disco:")
+    print("   - 'resultado_1_superpixels.png'")
+    print("   - 'resultado_2_imagens_cruas.png'")
     
-    # Abre a janela interativa do Matplotlib na sua tela
-    print("Abrindo visualização gráfica... Feche a janela para encerrar o script.")
+    # Exibe as duas janelas interativas na tela ao mesmo tempo
+    print("\nAbrindo ambas as formas gráficas no ecrã...")
     plt.show()

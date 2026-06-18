@@ -21,14 +21,15 @@ torch.set_grad_enabled(False)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Rodando em: {device}")
 
-# Instancia os modelos
-extractor = SuperPoint(max_num_keypoints=2048).eval().to(device)
+# Instancia os modelos com suporte adaptativo de velocidade do artigo
 matcher = LightGlue(
     feature="superpoint",
-    flash=True,               # Ativa aceleração de hardware para atenção se disponível
-    depth_confidence=0.9,     # Limiar para parar mais cedo se estiver confiante
-    width_confidence=0.95     # Remove pontos que dificilmente darão match logo cedo
+    flash=True,               # Aceleração de hardware se disponível
+    depth_confidence=0.95,    # Adaptive Depth ativado
+    width_confidence=0.99     # Adaptive Width ativado
 ).eval().to(device)
+
+extractor = SuperPoint(max_num_keypoints=2048).eval().to(device)
 
 # --- Funções Modulares do Pipeline ---
 
@@ -68,26 +69,41 @@ def run_boruvka(image_tensor, edge_map, n_supix):
     
     return torch.from_numpy(out).permute(2, 0, 1).float() / 255.0
 
-def run_lightglue_pipeline(img0_tensor, img1_tensor, title):
-    """
-    Módulo de Extração e Matching do LightGlue adaptativo.
-    Retorna a figura do plot, a contagem de matches e a camada de parada precoce.
-    """
-    img0 = img0_tensor.to(device)
-    img1 = img1_tensor.to(device)
+def crop_center_tensor(image_tensor, pct_w=0.3, pct_h=0.5):
+    """Fase: Focalização de Atenção (ROI) - Recorta o centro da imagem"""
+    C, H, W = image_tensor.shape
+    crop_w = int(W * pct_w)
+    crop_h = int(H * pct_h)
+    
+    x_start = (W - crop_w) // 2
+    y_start = (H - crop_h) // 2
+    x_end = x_start + crop_w
+    y_end = y_start + crop_h
+    
+    cropped_tensor = image_tensor[:, y_start:y_end, x_start:x_end]
+    return cropped_tensor, (x_start, y_start)
 
-    # Extração de Features
-    feats0 = extractor.extract(img0)
-    feats1 = extractor.extract(img1)
+def run_lightglue_pipeline_with_roi(img0_orig, img1_orig, title, pct_w=0.3, pct_h=0.5):
+    """Módulo de Extração e Matching com ROI e Correção para CPU/GPU"""
+    # 1. Aplica o Crop Central em ambas as imagens (Reduz região de busca)
+    img0_crop, offset0 = crop_center_tensor(img0_orig, pct_w, pct_h)
+    img1_crop, offset1 = crop_center_tensor(img1_orig, pct_w, pct_h)
+    
+    img0_dev = img0_crop.to(device)
+    img1_dev = img1_crop.to(device)
 
-    # Matching Adaptativo: Injeta o limiar de filtragem/poda nas primeiras camadas
+    # 2. Extração de Features restrita à ROI
+    feats0 = extractor.extract(img0_dev)
+    feats1 = extractor.extract(img1_dev)
+
+    # 3. Matching Adaptativo
     matches0 = matcher({
         "image0": feats0, 
         "image1": feats1,
-        "filter_threshold": 0.1  # Controla a agressividade da poda de keypoints inválidos
+        "filter_threshold": 0.1  # Poda de pontos irrelevantes
     })
     
-    # CORREÇÃO GEOMÉTRICA: Captura a camada de parada tratando corretamente se é int (CPU) ou Tensor (GPU)
+    # SOLUÇÃO DO ERRO CRÍTICO: Tratamento seguro para inteiros em CPU e tensores em GPU
     if "stop" in matches0:
         stop_val = matches0["stop"]
         stop_layer = stop_val.item() if hasattr(stop_val, "item") else int(stop_val)
@@ -97,21 +113,33 @@ def run_lightglue_pipeline(img0_tensor, img1_tensor, title):
     # Remove batch dimension
     feats0, feats1, matches0 = [rbd(x) for x in [feats0, feats1, matches0]]
 
-    # Filtra keypoints válidos após a poda adaptativa
-    kpts0, kpts1, matches = feats0["keypoints"], feats1["keypoints"], matches0["matches"]
-    m_kpts0, m_kpts1 = kpts0[matches[..., 0]], kpts1[matches[..., 1]]
+    kpts0, kpts1 = feats0["keypoints"], feats1["keypoints"]
+    matches = matches0["matches"]
+    
+    m_kpts0_crop = kpts0[matches[..., 0]]
+    m_kpts1_crop = kpts1[matches[..., 1]]
 
     count = len(matches)
     
-    # Força o fechamento de resíduos anteriores e plota no canvas correto
+    # 4. Translação de Coordenadas de volta para o espaço da Imagem Original
+    offset0_tensor = torch.tensor([offset0[0], offset0[1]], device=m_kpts0_crop.device)
+    offset1_tensor = torch.tensor([offset1[0], offset1[1]], device=m_kpts1_crop.device)
+    
+    m_kpts0_orig = m_kpts0_crop + offset0_tensor
+    m_kpts1_orig = m_kpts1_crop + offset1_tensor
+
+    # 5. Renderização do gráfico na Imagem Original
     plt.close('all') 
-    axes = viz2d.plot_images([img0_tensor, img1_tensor])
-    viz2d.plot_matches(m_kpts0, m_kpts1, color="lime", lw=0.2)
+    axes = viz2d.plot_images([img0_orig, img1_orig])
+    viz2d.plot_matches(m_kpts0_orig, m_kpts1_orig, color="lime", lw=0.2)
     
-    # Adiciona a informação científica da camada de parada diretamente na imagem salva
-    viz2d.add_text(0, f'{title}\nMatches: {count} | Stop Layer: {stop_layer}', fs=12)
+    # Desenha o quadrado tracejado vermelho da ROI na imagem de referência
+    W0, H0 = img0_orig.shape[2], img0_orig.shape[1]
+    rect = plt.Rectangle((offset0[0], offset0[1]), W0 * pct_w, H0 * pct_h, 
+                         edgecolor="red", facecolor="none", linestyle="--", linewidth=1.5)
+    plt.gca().add_patch(rect)
     
-    # Captura a figura que o viz2d acabou de desenhar no buffer
+    viz2d.add_text(0, f'{title}\nMatches na ROI: {count} | Stop Layer: {stop_layer}', fs=12)
     fig = plt.gcf()
     
     return fig, count, stop_layer
@@ -122,20 +150,17 @@ path_ref = Path("src/assets/vaso_1.jpeg")
 path_cur = Path("src/assets/vaso_2.jpeg")
 
 try:
-    # 1. Carrega as imagens originais puras
     ref_orig = load_image(path_ref)
     cur_orig = load_image(path_cur)
 
-    # 2. Configura a árvore de diretórios do experimento atual
     run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     base_dir = Path(f"runs/run_{run_id}")
     base_dir.mkdir(parents=True, exist_ok=True)
-    print(f"\n=> Iniciando Experimento. Diretorio central: {base_dir}")
+    print(f"\n=> Iniciando Experimento Seguro. Diretorio central: {base_dir}")
 
-    # Valores de n baseados na granularidade recomendada pelo artigo
+    # Valores de granularidade validados pelo survey e artigo de hierarquia
     n_values = [50, 75, 100, 150, 200, 300, 400]
 
-    # Definição dos 4 Fluxos do Pipeline
     fluxos = [
         {"id": "1_Boruvka_Puro", "desc": "Boruvka Puro + LightGlue"},
         {"id": "2_HM_Boruvka", "desc": "Histogram Matching + Boruvka + LightGlue"},
@@ -148,30 +173,22 @@ try:
         fluxo_desc = fluxo["desc"]
         print(f"\n=== Executando Fluxo: {fluxo_desc} ===")
         
-        # Cria a subpasta específica deste fluxo
         fluxo_dir = base_dir / fluxo_id
         fluxo_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Inicializa a lista para salvar os dados do arquivo CSV
         csv_data = []
         
         for n in n_values:
             title = f"N={n}"
             
-            # --- CONSTRUÇÃO DINÂMICA DAS FASES DO PIPELINE ---
-            
-            # Fluxo 1: Boruvka Puro (Sem HM, Sem BF, Sem Canny)
             if fluxo_id == "1_Boruvka_Puro":
                 ref_proc = run_boruvka(ref_orig, edge_map=None, n_supix=n)
                 cur_proc = run_boruvka(cur_orig, edge_map=None, n_supix=n)
                 
-            # Fluxo 2: HM + Boruvka
-            elif fluxo_id == "2_HM_Boruvka":
+            elif fluxo_id == "2_HM_Boruvka" or fluxo_id == "2_HM_Boruvka":
                 cur_hm = match_histogram_tensor(cur_orig, ref_orig)
                 ref_proc = run_boruvka(ref_orig, edge_map=None, n_supix=n)
                 cur_proc = run_boruvka(cur_hm, edge_map=None, n_supix=n)
                 
-            # Fluxo 3: HM + BF + Boruvka
             elif fluxo_id == "3_HM_BF_Boruvka":
                 cur_hm = match_histogram_tensor(cur_orig, ref_orig)
                 ref_bf = apply_bilateral_filter(ref_orig)
@@ -179,7 +196,6 @@ try:
                 ref_proc = run_boruvka(ref_bf, edge_map=None, n_supix=n)
                 cur_proc = run_boruvka(cur_bf, edge_map=None, n_supix=n)
                 
-            # Fluxo 4: HM + BF + Canny + Boruvka
             elif fluxo_id == "4_HM_BF_CE_Boruvka":
                 cur_hm = match_histogram_tensor(cur_orig, ref_orig)
                 ref_bf = apply_bilateral_filter(ref_orig)
@@ -191,34 +207,28 @@ try:
                 ref_proc = run_boruvka(ref_bf, edge_map=ref_edge, n_supix=n)
                 cur_proc = run_boruvka(cur_bf, edge_map=cur_edge, n_supix=n)
 
-            # Executa o LightGlue adaptativo (capturando o stop_layer)
-            fig, num_matches, stop_layer = run_lightglue_pipeline(ref_proc, cur_proc, f"{fluxo_id} - {title}")
-            print(f" -> {title}: {num_matches} matches encontrados (Parou na camada: {stop_layer}).")
+            # Executa com restrição de foco central de 30% na largura e altura
+            fig, num_matches, stop_layer = run_lightglue_pipeline_with_roi(
+                ref_proc, cur_proc, f"{fluxo_id} - {title}", pct_w=0.3, pct_h=0.3
+            )
+            print(f" -> {title}: {num_matches} matches encontrados (Stop Layer: {stop_layer}).")
             
-            # Salva o gráfico gerado na subpasta do fluxo
             img_filename = f"matches_n_{n}.png"
-            filepath = fluxo_dir / img_filename
-            fig.savefig(filepath, bbox_inches="tight", dpi=150)
+            fig.savefig(fluxo_dir / img_filename, bbox_inches="tight", dpi=150)
             plt.close(fig)
             
-            # Guarda as métricas expandidas para o CSV
-            csv_data.append({
-                "n_superpixels": n, 
-                "matches_count": num_matches,
-                "stop_layer": stop_layer  # <-- Nova coluna de métrica científica!
-            })
+            csv_data.append({"n_superpixels": n, "matches_count": num_matches, "stop_layer": stop_layer})
 
-        # --- GERAÇÃO DO RELATÓRIO CSV DO FLUXO (Atualizar cabeçalho) ---
         csv_filepath = fluxo_dir / "metrics.csv"
         with open(csv_filepath, mode="w", newline="", encoding="utf-8") as csv_file:
-            # Adicionado fieldname 'stop_layer'
             writer = csv.DictWriter(csv_file, fieldnames=["n_superpixels", "matches_count", "stop_layer"])
             writer.writeheader()
             writer.writerows(csv_data)
+        print(f"Relatório CSV salvo em: {csv_filepath}")
 
-    print("\n=> Experimento Concluído com sucesso! Verifique a pasta 'runs/' para analisar as imagens reais geradas.")
+    print("\n=> Experimento Concluído! Imagens reais salvas com as linhas de matches mapeadas de volta.")
 
 except FileNotFoundError as e:
-    print(f"Erro de arquivo: Verifique os caminhos dos assets. {e}")
+    print(f"Erro de arquivo: {e}")
 except Exception as e:
     print(f"Erro crítico no pipeline: {e}")
