@@ -117,6 +117,44 @@ def run_pipeline_with_homography(img0_proc, img1_proc, img0_raw, img1_raw, title
     
     return fig_proc, fig_raw, H, len(matches), inliers, stop_layer
 
+def extrair_erro_homografia_nao_calibrada(H):
+    """
+    Extrai o vetor de características visuais e o vetor de erro 
+    para sistemas de Visual Servoing Não-Calibrado.
+    
+    Parâmetros:
+    ----------
+    H : np.ndarray (3x3)
+        Matriz de homografia calculada pelo RANSAC.
+        
+    Retorna:
+    -------
+    s : np.ndarray (8x1)
+        Vetor com os 8 parâmetros independentes da homografia atual.
+    e : np.ndarray (8x1)
+        Vetor de erro (s - s*) que alimenta a malha fechada do robô.
+    """
+    if H is None:
+        return None, None
+        
+    # 1. Garante a normalização dividindo toda a matriz pelo último elemento (H[2,2] = 1)
+    H_norm = H / H[2, 2]
+    
+    # 2. Extrai as 8 componentes independentes (linhas 0, 1 e os dois primeiros elementos da linha 2)
+    s = np.array([
+        H_norm[0, 0], H_norm[0, 1], H_norm[0, 2],
+        H_norm[1, 0], H_norm[1, 1], H_norm[1, 2],
+        H_norm[2, 0], H_norm[2, 1]
+    ], dtype=np.float32).reshape(8, 1)
+    
+    # 3. Define o vetor de destino s* (representando a Matriz Identidade)
+    s_estrela = np.array([1, 0, 0, 0, 1, 0, 0, 0], dtype=np.float32).reshape(8, 1)
+    
+    # 4. Calcula o vetor de erro geométrico puro
+    e = s - s_estrela
+    
+    return s, e
+
 
 if __name__ == "__main__":
     # 1. Carrega as imagens originais
@@ -163,6 +201,26 @@ if __name__ == "__main__":
     
     # 5. Cálculo do Erro Residual Real de Alinhamento
     if H_calculado is not None:
+
+
+        H_calculada = np.array([
+        [ 0.965, -0.258, 40.0],
+        [ 0.258,  0.965, -20.0],
+        [ 0.000,  0.000,   1.0]
+        ]   , dtype=np.float32)
+    
+        s, erro = extrair_erro_homografia_nao_calibrada(H_calculada)
+        
+        print("=======================================================")
+        print("      VETOR DE ERRO PARA VISUAL SERVOING NÃO-CALIBRADO ")
+        print("=======================================================")
+        print(" Vetor de Características Atuais (s):")
+        print(s.flatten())
+        print("\n Vetor de Erro que vai para o Controlador (e = s - s*):")
+        print(erro.flatten())
+        print("=======================================================")
+
+        
         cantos = np.array([[0, 0], [w_img, 0], [w_img, h_img], [0, h_img]], dtype=np.float32).reshape(-1, 1, 2)
         cantos_reais = cv2.perspectiveTransform(cantos, H_ground_truth)
         cantos_estimados = cv2.perspectiveTransform(cantos, H_calculado)

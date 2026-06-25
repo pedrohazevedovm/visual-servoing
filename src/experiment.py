@@ -103,7 +103,7 @@ def run_lightglue_pipeline_with_roi(img0_orig, img1_orig, title, pct_w=0.3, pct_
         "filter_threshold": 0.1  # Poda de pontos irrelevantes
     })
     
-    # SOLUÇÃO DO ERRO CRÍTICO: Tratamento seguro para inteiros em CPU e tensores em GPU
+    # Tratamento seguro para inteiros em CPU e tensores em GPU
     if "stop" in matches0:
         stop_val = matches0["stop"]
         stop_layer = stop_val.item() if hasattr(stop_val, "item") else int(stop_val)
@@ -158,10 +158,12 @@ try:
     base_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n=> Iniciando Experimento Seguro. Diretorio central: {base_dir}")
 
-    # Valores de granularidade validados pelo survey e artigo de hierarquia
+    # Valores de granularidade para as configurações com superpixels
     n_values = [50, 75, 100, 150, 200, 300, 400]
 
+    # ADICIONADO: Configuração 0 no topo da árvore de testes
     fluxos = [
+        {"id": "0_Sem_Boruvka", "desc": "Imagens Cruas Originais (Sem Boruvka)"},
         {"id": "1_Boruvka_Puro", "desc": "Boruvka Puro + LightGlue"},
         {"id": "2_HM_Boruvka", "desc": "Histogram Matching + Boruvka + LightGlue"},
         {"id": "3_HM_BF_Boruvka", "desc": "Histogram Matching + Bilateral Filter + Boruvka + LightGlue"},
@@ -177,48 +179,70 @@ try:
         fluxo_dir.mkdir(parents=True, exist_ok=True)
         csv_data = []
         
-        for n in n_values:
-            title = f"N={n}"
+        # Estrutura condicional para tratar a Config 0 de forma isolada
+        if fluxo_id == "0_Sem_Boruvka":
+            title = "Imagens_Cruas"
+            print(f" -> Processando Baseline (Sem Superpixels)...")
             
-            if fluxo_id == "1_Boruvka_Puro":
-                ref_proc = run_boruvka(ref_orig, edge_map=None, n_supix=n)
-                cur_proc = run_boruvka(cur_orig, edge_map=None, n_supix=n)
-                
-            elif fluxo_id == "2_HM_Boruvka" or fluxo_id == "2_HM_Boruvka":
-                cur_hm = match_histogram_tensor(cur_orig, ref_orig)
-                ref_proc = run_boruvka(ref_orig, edge_map=None, n_supix=n)
-                cur_proc = run_boruvka(cur_hm, edge_map=None, n_supix=n)
-                
-            elif fluxo_id == "3_HM_BF_Boruvka":
-                cur_hm = match_histogram_tensor(cur_orig, ref_orig)
-                ref_bf = apply_bilateral_filter(ref_orig)
-                cur_bf = apply_bilateral_filter(cur_hm)
-                ref_proc = run_boruvka(ref_bf, edge_map=None, n_supix=n)
-                cur_proc = run_boruvka(cur_bf, edge_map=None, n_supix=n)
-                
-            elif fluxo_id == "4_HM_BF_CE_Boruvka":
-                cur_hm = match_histogram_tensor(cur_orig, ref_orig)
-                ref_bf = apply_bilateral_filter(ref_orig)
-                cur_bf = apply_bilateral_filter(cur_hm)
-                
-                ref_edge = apply_canny_edge(ref_bf)
-                cur_edge = apply_canny_edge(cur_bf)
-                
-                ref_proc = run_boruvka(ref_bf, edge_map=ref_edge, n_supix=n)
-                cur_proc = run_boruvka(cur_bf, edge_map=cur_edge, n_supix=n)
-
-            # Executa com restrição de foco central de 30% na largura e altura
+            # Passa as duas imagens cruas originais diretamente
             fig, num_matches, stop_layer = run_lightglue_pipeline_with_roi(
-                ref_proc, cur_proc, f"{fluxo_id} - {title}", pct_w=0.3, pct_h=0.3
+                ref_orig, cur_orig, f"{fluxo_id} - {title}", pct_w=1, pct_h=1
             )
-            print(f" -> {title}: {num_matches} matches encontrados (Stop Layer: {stop_layer}).")
+            print(f"   -> Resultado Baseline: {num_matches} matches encontrados (Stop Layer: {stop_layer}).")
             
-            img_filename = f"matches_n_{n}.png"
+            # Salva o gráfico e armazena os dados com flag indicando a ausência do Borůvka
+            img_filename = "matches_imagens_cruas.png"
             fig.savefig(fluxo_dir / img_filename, bbox_inches="tight", dpi=150)
             plt.close(fig)
             
-            csv_data.append({"n_superpixels": n, "matches_count": num_matches, "stop_layer": stop_layer})
+            # Colocamos "0" ou "None" para o número de superpixels no relatório
+            csv_data.append({"n_superpixels": 0, "matches_count": num_matches, "stop_layer": stop_layer})
+            
+        else:
+            # Loops originais para as configurações incrementais com superpixels (1 a 4)
+            for n in n_values:
+                title = f"N={n}"
+                
+                if fluxo_id == "1_Boruvka_Puro":
+                    ref_proc = run_boruvka(ref_orig, edge_map=None, n_supix=n)
+                    cur_proc = run_boruvka(cur_orig, edge_map=None, n_supix=n)
+                    
+                elif fluxo_id == "2_HM_Boruvka":
+                    cur_hm = match_histogram_tensor(cur_orig, ref_orig)
+                    ref_proc = run_boruvka(ref_orig, edge_map=None, n_supix=n)
+                    cur_proc = run_boruvka(cur_hm, edge_map=None, n_supix=n)
+                    
+                elif fluxo_id == "3_HM_BF_Boruvka":
+                    cur_hm = match_histogram_tensor(cur_orig, ref_orig)
+                    ref_bf = apply_bilateral_filter(ref_orig)
+                    cur_bf = apply_bilateral_filter(cur_hm)
+                    ref_proc = run_boruvka(ref_bf, edge_map=None, n_supix=n)
+                    cur_proc = run_boruvka(cur_bf, edge_map=None, n_supix=n)
+                    
+                elif fluxo_id == "4_HM_BF_CE_Boruvka":
+                    cur_hm = match_histogram_tensor(cur_orig, ref_orig)
+                    ref_bf = apply_bilateral_filter(ref_orig)
+                    cur_bf = apply_bilateral_filter(cur_hm)
+                    
+                    ref_edge = apply_canny_edge(ref_bf)
+                    cur_edge = apply_canny_edge(cur_bf)
+                    
+                    ref_proc = run_boruvka(ref_bf, edge_map=ref_edge, n_supix=n)
+                    cur_proc = run_boruvka(cur_bf, edge_map=cur_edge, n_supix=n)
 
+                # Executa com restrição de foco central de 30% na largura e altura
+                fig, num_matches, stop_layer = run_lightglue_pipeline_with_roi(
+                    ref_proc, cur_proc, f"{fluxo_id} - {title}", pct_w=1, pct_h=1
+                )
+                print(f" -> {title}: {num_matches} matches encontrados (Stop Layer: {stop_layer}).")
+                
+                img_filename = f"matches_n_{n}.png"
+                fig.savefig(fluxo_dir / img_filename, bbox_inches="tight", dpi=150)
+                plt.close(fig)
+                
+                csv_data.append({"n_superpixels": n, "matches_count": num_matches, "stop_layer": stop_layer})
+
+        # Gravação do relatório CSV específico do fluxo atual
         csv_filepath = fluxo_dir / "metrics.csv"
         with open(csv_filepath, mode="w", newline="", encoding="utf-8") as csv_file:
             writer = csv.DictWriter(csv_file, fieldnames=["n_superpixels", "matches_count", "stop_layer"])
