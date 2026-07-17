@@ -1,0 +1,15 @@
+.DS_Store
+*~
+*.pyc
+._*.m
+output/
+data/
+eval/output/
+.ipynb_checkpoints/
+__pycache__/
+trained_models/
+preds/
+ValidateImages/
+hed-data.tar
+.vscode
+.ruff_cache
