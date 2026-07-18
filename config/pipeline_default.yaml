@@ -1,0 +1,37 @@
+pipeline:
+  - type: "histogram_matching"
+    enabled: true
+    params: {}
+
+  - type: "bilateral_filter"
+    enabled: true
+    params:
+      d: 9
+      sigmaColor: 75.0
+      sigmaSpace: 75.0
+
+  - type: "edge_detection"
+    enabled: true
+    params:
+      method: "octhed" # Options: 'canny', 'octhed', 'none'
+      threshold1: 50.0
+      threshold2: 150.0
+
+  - type: "superpixel_reduction"
+    enabled: true
+    params:
+      algorithm: "boruvka" # Options: 'boruvka', 'slic', 'meanshift', 'none'
+      n_superpixels: 100
+      compactness: 10.0
+
+  - type: "roi_crop"
+    enabled: true
+    params:
+      pct_w: 0.3
+      pct_h: 0.5
+
+  - type: "feature_matching"
+    enabled: true
+    params:
+      max_num_keypoints: 2048
+      filter_threshold: 0.1

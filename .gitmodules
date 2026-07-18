@@ -1,9 +1,0 @@
-[submodule "LightGlue"]
-	path = LightGlue
-	url = https://github.com/cvg/LightGlue
-[submodule "boruvka-superpixel"]
-	path = boruvka-superpixel
-	url = https://github.com/semiquark1/boruvka-superpixel
-[submodule "octHED"]
-	path = octHED
-	url = https://github.com/Ayrsz/octHED.git

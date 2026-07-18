@@ -1,0 +1,25 @@
+experiment_name: "gridsearch_ablation_study"
+
+data:
+  ref_image: "src/assets/vaso_1.jpeg"
+  cur_image: "src/assets/vaso_2.jpeg"
+
+grid:
+  histogram_matching: [true, false]
+  bilateral_filter: [true, false]
+  edge_detection_method: ["none", "canny", "octhed"]
+  superpixel_algorithm: ["none", "boruvka"]
+  n_superpixels: [50, 100, 200]
+  roi_enabled: [true, false]
+
+defaults:
+  bilateral_params:
+    d: 9
+    sigmaColor: 75.0
+    sigmaSpace: 75.0
+  roi_params:
+    pct_w: 0.3
+    pct_h: 0.5
+  feature_matching_params:
+    max_num_keypoints: 2048
+    filter_threshold: 0.1
