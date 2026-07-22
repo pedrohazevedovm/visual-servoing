@@ -62,7 +62,7 @@ def build_pipeline_from_combo(combo: Dict[str, Any], defaults: Dict[str, Any]) -
     fm_params = defaults.get("feature_matching_params", {})
     steps.append(StepRegistry.create("feature_matching", enabled=True, **fm_params))
 
-    return Pipeline(steps=steps)
+    return Pipeline(steps=steps, config=combo)
 
 
 def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):

@@ -1,28 +1,28 @@
 import os
-import sys
 from typing import Optional, Union
-
-# Ensure octHED directory is in sys.path so internal imports (models, utils) resolve
-OCTHED_DIR = os.path.dirname(os.path.abspath(__file__))
-if OCTHED_DIR not in sys.path:
-    sys.path.insert(0, OCTHED_DIR)
-
 import cv2 as cv
 import numpy as np
 import torch
 from torch import nn
 from torchvision.utils import save_image
 
-from models.octave_model_full import OCTHEDFULL
-from utils import load_checkpoint
+from octHED.models.octave_model_full import OCTHEDFULL
+from octHED.models.hed_model import HED
+from octHED.utils import load_checkpoint
 
 DEFAULT_MODEL_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'trained_models',
     'OctHED Source',
-    'epoch-4-checkpoint.pt',
+    'epoch-4-checkpoint.pt'
 )
 
+DEFAULT_MODEL_PATH_HED = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'trained_models',
+    'OctHED Source',
+    'checkpoint_hed.pt'
+)
 
 class Predictor:
     """
@@ -42,17 +42,24 @@ class Predictor:
 
         if net is not None:
             self.net = net
+            
         else:
-            if model_path is None:
+            if model_path == 'octhed':
                 model_path = DEFAULT_MODEL_PATH
+                self.net = torch.nn.DataParallel(OCTHEDFULL(self.device, alpha=0.5))
 
-            self.net = torch.nn.DataParallel(OCTHEDFULL(self.device, alpha=0.5))
+            elif model_path == 'hed':
+                model_path = DEFAULT_MODEL_PATH_HED
+                self.net = torch.nn.DataParallel(HED(self.device))
+            
+            
             load_checkpoint(
                 self.net,
                 torch.optim.SGD(self.net.parameters()),
                 model_path,
                 self.device,
             )
+
 
         self.net = self.net.to(self.device)
         self.net.eval()

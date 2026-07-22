@@ -12,6 +12,7 @@ def compute_pipeline_metrics(
     context: PipelineContext,
     ground_truth_H: Optional[np.ndarray] = None,
     ransac_reproj_threshold: float = 3.0,
+    config: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Computes all quantitative metrics from the executed PipelineContext.
@@ -57,8 +58,10 @@ def compute_pipeline_metrics(
             )
 
     total_time_sec = sum(context.step_times.values())
+    used_config = config if config is not None else context.config
 
     metrics = {
+        "config": used_config,
         "matches_count": matches_count,
         "inliers_count": inliers_count,
         "inlier_ratio_pct": round(inlier_ratio, 2),

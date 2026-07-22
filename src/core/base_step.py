@@ -35,6 +35,16 @@ class BaseStep(ABC):
         """
         pass
 
+    def to_dict(self) -> dict:
+        """
+        Serializes step to a dictionary representation.
+        """
+        return {
+            "type": self.name,
+            "enabled": self.enabled,
+            "params": self.params,
+        }
+
     def __repr__(self) -> str:
         status = "enabled" if self.enabled else "disabled"
         return f"<{self.__class__.__name__}(name='{self.name}', status={status}, params={self.params})>"

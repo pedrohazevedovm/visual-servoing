@@ -72,27 +72,27 @@ class Reporter:
             )
             plt.gca().add_patch(rect)
 
-        # Plot Homography warped bounding box on current image
-        if context.homography is not None:
-            W0, H0 = img0.shape[2], img0.shape[1]
-            cantos_base = np.array(
-                [[0, 0], [W0, 0], [W0, H0], [0, H0]], dtype=np.float32
-            ).reshape(-1, 1, 2)
-            try:
-                cantos_projetados = cv2.perspectiveTransform(
-                    cantos_base, np.linalg.inv(context.homography)
-                )
-                cantos_plot = cantos_projetados.squeeze() + np.array([W0, 0])
-                polygon = plt.Polygon(
-                    cantos_plot,
-                    edgecolor="cyan",
-                    facecolor="none",
-                    linewidth=2.0,
-                    linestyle="-",
-                )
-                plt.gca().add_patch(polygon)
-            except Exception:
-                pass
+        # # Plot Homography warped bounding box on current image
+        # if context.homography is not None:
+        #     W0, H0 = img0.shape[2], img0.shape[1]
+        #     cantos_base = np.array(
+        #         [[0, 0], [W0, 0], [W0, H0], [0, H0]], dtype=np.float32
+        #     ).reshape(-1, 1, 2)
+        #     try:
+        #         cantos_projetados = cv2.perspectiveTransform(
+        #             cantos_base, np.linalg.inv(context.homography)
+        #         )
+        #         cantos_plot = cantos_projetados.squeeze() + np.array([W0, 0])
+        #         polygon = plt.Polygon(
+        #             cantos_plot,
+        #             edgecolor="cyan",
+        #             facecolor="none",
+        #             linewidth=2.0,
+        #             linestyle="-",
+        #         )
+        #         plt.gca().add_patch(polygon)
+        #     except Exception:
+        #         pass
 
         matches_count = len(context.matches) if context.matches is not None else 0
         text_label = f"{title}\nMatches: {matches_count} | Inliers: {context.inliers_count} | Stop Layer: {context.stop_layer}"
