@@ -42,24 +42,24 @@ class Predictor:
 
         if net is not None:
             self.net = net
-            
         else:
-            if model_path == 'octhed':
-                model_path = DEFAULT_MODEL_PATH
+            if model_path == 'hed':
+                ckpt_path = DEFAULT_MODEL_PATH_HED
+                self.net = torch.nn.DataParallel(HED(self.device))
+            else:
+                ckpt_path = (
+                    DEFAULT_MODEL_PATH
+                    if (model_path is None or model_path == 'octhed')
+                    else model_path
+                )
                 self.net = torch.nn.DataParallel(OCTHEDFULL(self.device, alpha=0.5))
 
-            elif model_path == 'hed':
-                model_path = DEFAULT_MODEL_PATH_HED
-                self.net = torch.nn.DataParallel(HED(self.device))
-            
-            
             load_checkpoint(
                 self.net,
                 torch.optim.SGD(self.net.parameters()),
-                model_path,
+                ckpt_path,
                 self.device,
             )
-
 
         self.net = self.net.to(self.device)
         self.net.eval()
@@ -92,9 +92,58 @@ class Predictor:
         )
         return tensor_img
 
+    def preprocess_batch(self, images: list) -> torch.Tensor:
+        """
+        Preprocesses a list of images (paths or BGR numpy arrays) into a batch tensor (N, 3, H, W).
+        """
+        tensors = []
+        for img in images:
+            if isinstance(img, str) or hasattr(img, '__fspath__'):
+                img_path = str(img)
+                img_arr = cv.imread(img_path)
+                if img_arr is None:
+                    raise ValueError(f"Could not read image from path: {img_path}")
+            elif isinstance(img, np.ndarray):
+                img_arr = img
+            else:
+                raise TypeError(
+                    f"Unsupported image type: {type(img)}. Expected path string or numpy.ndarray."
+                )
+
+            img_float = img_arr.astype(np.float32)
+            img_sub = img_float - np.array(
+                (104.00698793, 116.66876762, 122.67891434), dtype=np.float32
+            )
+            img_transposed = np.transpose(img_sub, (2, 0, 1))  # HWC to CHW
+            tensors.append(img_transposed)
+
+        batch_np = np.stack(tensors, axis=0)  # Shape (N, 3, H, W)
+        tensor_img = torch.from_numpy(batch_np).float().to(self.device)
+        return tensor_img
+
+    def preprocess_tensor_batch(self, tensors: torch.Tensor) -> torch.Tensor:
+        """
+        Preprocesses a PyTorch tensor batch (N, 3, H, W) in RGB [0..1] directly into
+        mean-subtracted BGR tensor (N, 3, H, W) on self.device without CPU roundtrips.
+        """
+        if tensors.dim() == 3:
+            tensors = tensors.unsqueeze(0)  # Shape (1, 3, H, W)
+
+        tensors = tensors.to(self.device)
+        # Reorder RGB to BGR: channels [2, 1, 0]
+        bgr_tensors = tensors[:, [2, 1, 0], :, :] * 255.0
+
+        mean = torch.tensor(
+            [104.00698793, 116.66876762, 122.67891434],
+            dtype=torch.float32,
+            device=self.device,
+        ).view(1, 3, 1, 1)
+
+        return bgr_tensors - mean
+
     def predict(
         self,
-        image: Union[str, np.ndarray],
+        image: Union[str, np.ndarray, torch.Tensor],
         save: bool = False,
         save_path: Optional[str] = None,
     ) -> torch.Tensor:
@@ -102,16 +151,19 @@ class Predictor:
         Runs edge detection prediction on an image.
 
         Args:
-            image (str | np.ndarray): Image file path or BGR numpy array.
+            image (str | np.ndarray | torch.Tensor): Image file path, BGR numpy array, or PyTorch RGB Tensor.
             save (bool): If True, saves the predicted image. Default False.
             save_path (str, optional): Custom path to save image.
 
         Returns:
             torch.Tensor: Prediction output tensor (shape 1x1xHxW).
         """
-        tensor_img = self.preprocess(image)
+        if isinstance(image, torch.Tensor):
+            tensor_img = self.preprocess_tensor_batch(image)
+        else:
+            tensor_img = self.preprocess(image)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             pred_list = self.net(tensor_img)
             prediction = pred_list[-1]
 
@@ -129,6 +181,51 @@ class Predictor:
                 os.makedirs(save_dir, exist_ok=True)
 
             save_image(prediction, save_path)
+
+        return prediction
+
+    def predict_batch(
+        self,
+        images: Union[list, tuple, torch.Tensor],
+        save: bool = False,
+        save_paths: Optional[list[str]] = None,
+    ) -> torch.Tensor:
+        """
+        Runs edge detection prediction on a batch of images in a single GPU pass.
+
+        Args:
+            images (list | tuple | torch.Tensor): List of image file paths, BGR numpy arrays, or stacked/list PyTorch Tensors.
+            save (bool): If True, saves the predicted images. Default False.
+            save_paths (list[str], optional): Custom list of paths to save images.
+
+        Returns:
+            torch.Tensor: Prediction output tensor (shape Nx1xHxW).
+        """
+        if isinstance(images, torch.Tensor):
+            tensor_img = self.preprocess_tensor_batch(images)
+        elif isinstance(images, (list, tuple)) and len(images) > 0 and isinstance(images[0], torch.Tensor):
+            stacked = torch.stack(list(images), dim=0)
+            tensor_img = self.preprocess_tensor_batch(stacked)
+        else:
+            tensor_img = self.preprocess_batch(images)
+
+        with torch.inference_mode():
+            pred_list = self.net(tensor_img)
+            prediction = pred_list[-1]  # shape (N, 1, H, W)
+
+        if save:
+            if save_paths is None:
+                preds_dir = './preds/'
+                save_paths = [
+                    os.path.join(preds_dir, f'border_{i}.png')
+                    for i in range(len(prediction))
+                ]
+
+            for idx, s_path in enumerate(save_paths):
+                save_dir = os.path.dirname(s_path)
+                if save_dir and not os.path.exists(save_dir):
+                    os.makedirs(save_dir, exist_ok=True)
+                save_image(prediction[idx], s_path)
 
         return prediction
 

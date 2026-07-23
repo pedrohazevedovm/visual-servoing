@@ -73,12 +73,23 @@ class EdgeDetectionStep(BaseStep):
         if self.method == "canny":
             context.edge_map_ref = self._canny(context.img_ref_proc)
             context.edge_map_cur = self._canny(context.img_cur_proc)
-        elif self.method == "octhed":
-            context.edge_map_ref = self._octhed(context.img_ref_proc)
-            context.edge_map_cur = self._octhed(context.img_cur_proc)
-        elif self.method == "hed":
-            context.edge_map_ref = self._hed(context.img_ref_proc)
-            context.edge_map_cur = self._hed(context.img_cur_proc)
+        elif self.method in ("octhed", "hed"):
+            predictor = get_octhed_predictor(self.method)
+
+            # Pass PyTorch RGB tensors directly (N=2, C=3, H, W) - Zero CPU/NumPy conversion before GPU
+            batch_tensors = torch.stack(
+                [context.img_ref_proc, context.img_cur_proc], dim=0
+            )
+
+            edge_tensors = predictor.predict_batch(
+                batch_tensors, save=self.save_predictions
+            )
+
+            edge_ref_np = edge_tensors[0].squeeze().cpu().numpy()
+            edge_cur_np = edge_tensors[1].squeeze().cpu().numpy()
+
+            context.edge_map_ref = np.clip(edge_ref_np * 255.0, 0, 255).astype(np.uint8)
+            context.edge_map_cur = np.clip(edge_cur_np * 255.0, 0, 255).astype(np.uint8)
         else:  # 'none'
             context.edge_map_ref = None
             context.edge_map_cur = None

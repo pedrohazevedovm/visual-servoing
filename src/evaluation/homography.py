@@ -7,12 +7,12 @@ def estimate_homography(
     pts0: np.ndarray, pts1: np.ndarray, ransac_reproj_threshold: float = 3.0
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], int]:
     """
-    Estimates Homography matrix H mapping pts1 -> pts0 using OpenCV RANSAC.
+    Estimates Homography matrix H mapping pts0 (reference) -> pts1 (current) using OpenCV RANSAC.
     """
     if pts0 is None or pts1 is None or len(pts0) < 4:
         return None, None, 0
 
-    H, mask = cv2.findHomography(pts1, pts0, cv2.RANSAC, ransac_reproj_threshold)
+    H, mask = cv2.findHomography(pts0, pts1, cv2.RANSAC, ransac_reproj_threshold)
     inliers_count = int(np.sum(mask)) if mask is not None else 0
     return H, mask, inliers_count
 

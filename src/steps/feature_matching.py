@@ -16,6 +16,8 @@ def get_feature_models(
     depth_confidence: float = 0.95,
     width_confidence: float = 0.99,
     filter_threshold: float = 0.1,
+    n_layers: int = 9,
+    mp: bool = False,
     device: str = None,
 ):
     global _extractor, _matcher
@@ -30,8 +32,11 @@ def get_feature_models(
             LightGlue(
                 feature="superpoint",
                 flash=True,
+                n_layers=n_layers,
+                mp=mp,
                 depth_confidence=depth_confidence,
                 width_confidence=width_confidence,
+                filter_threshold=filter_threshold,
             )
             .eval()
             .to(device)
@@ -56,6 +61,8 @@ class FeatureMatchingStep(BaseStep):
         filter_threshold: float = 0.1,
         depth_confidence: float = 0.95,
         width_confidence: float = 0.99,
+        n_layers: int = 9,
+        mp: bool = False,
         **kwargs,
     ):
         super().__init__(name=name, enabled=enabled, **kwargs)
@@ -63,29 +70,35 @@ class FeatureMatchingStep(BaseStep):
         self.filter_threshold = filter_threshold
         self.depth_confidence = depth_confidence
         self.width_confidence = width_confidence
+        self.n_layers = n_layers
+        self.mp = mp
 
     def process(self, context: PipelineContext) -> PipelineContext:
         extractor, matcher, device = get_feature_models(
             max_num_keypoints=self.max_num_keypoints,
             depth_confidence=self.depth_confidence,
             width_confidence=self.width_confidence,
+            filter_threshold=self.filter_threshold,
+            n_layers=self.n_layers,
+            mp=self.mp,
         )
 
         img0_dev = context.img_ref_proc.to(device)
         img1_dev = context.img_cur_proc.to(device)
 
-        # 1. Feature Extraction
-        feats0 = extractor.extract(img0_dev)
-        feats1 = extractor.extract(img1_dev)
+        with torch.inference_mode():
+            # 1. Feature Extraction
+            feats0 = extractor.extract(img0_dev)
+            feats1 = extractor.extract(img1_dev)
 
-        # 2. Adaptive LightGlue Matching
-        matches0 = matcher(
-            {
-                "image0": feats0,
-                "image1": feats1,
-                "filter_threshold": self.filter_threshold,
-            }
-        )
+            # 2. Adaptive LightGlue Matching
+            matches0 = matcher(
+                {
+                    "image0": feats0,
+                    "image1": feats1,
+                    "filter_threshold": self.filter_threshold,
+                }
+            )
 
         # Extract stop_layer
         if "stop" in matches0:

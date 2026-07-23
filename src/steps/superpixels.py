@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import sys
 from typing import Optional
 import cv2
@@ -90,18 +91,27 @@ class SuperpixelReductionStep(BaseStep):
 
     def process(self, context: PipelineContext) -> PipelineContext:
         if self.algorithm == "boruvka":
-            context.img_ref_proc = self._boruvka(
-                context.img_ref_proc, context.edge_map_ref
-            )
-            context.img_cur_proc = self._boruvka(
-                context.img_cur_proc, context.edge_map_cur
-            )
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f_ref = executor.submit(
+                    self._boruvka, context.img_ref_proc, context.edge_map_ref
+                )
+                f_cur = executor.submit(
+                    self._boruvka, context.img_cur_proc, context.edge_map_cur
+                )
+                context.img_ref_proc = f_ref.result()
+                context.img_cur_proc = f_cur.result()
         elif self.algorithm == "slic":
-            context.img_ref_proc = self._slic(context.img_ref_proc)
-            context.img_cur_proc = self._slic(context.img_cur_proc)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f_ref = executor.submit(self._slic, context.img_ref_proc)
+                f_cur = executor.submit(self._slic, context.img_cur_proc)
+                context.img_ref_proc = f_ref.result()
+                context.img_cur_proc = f_cur.result()
         elif self.algorithm == "meanshift":
-            context.img_ref_proc = self._meanshift(context.img_ref_proc)
-            context.img_cur_proc = self._meanshift(context.img_cur_proc)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f_ref = executor.submit(self._meanshift, context.img_ref_proc)
+                f_cur = executor.submit(self._meanshift, context.img_cur_proc)
+                context.img_ref_proc = f_ref.result()
+                context.img_cur_proc = f_cur.result()
         else:  # 'none'
             pass
 

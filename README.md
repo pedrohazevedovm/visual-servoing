@@ -108,7 +108,31 @@ python src/experiments/run_pipeline.py \
 
 ---
 
-### 2. Executar um Experimento de GridSearch (Varredura em Lote)
+### 2. Avaliação com Imagem Única e Ground Truth Sintético ($H_{gt}$)
+Para avaliar a acurácia quantitativa do pipeline contra a matriz de Homografia real obtida de forma matemática controlada (**Ground Truth $H_{gt}$**), você pode fornecer **uma única imagem** e aplicar transformações sintéticas (rotação, escala e translação):
+
+```bash
+python src/experiments/run_pipeline.py \
+  --config config/pipeline_default.yaml \
+  --single src/assets/vaso_1.jpeg \
+  --angle 15.0 \
+  --scale 1.05 \
+  --tx 30.0 \
+  --ty -20.0
+```
+
+**Parâmetros para modo sintético:**
+- `--single`: Caminho para a imagem única de entrada.
+- `--angle`: Ângulo de rotação em graus (ex: `15.0`).
+- `--scale`: Fator de escala geométrica (ex: `1.05`).
+- `--tx`: Translação horizontal em pixels (ex: `30.0`).
+- `--ty`: Translação vertical em pixels (ex: `-20.0`).
+
+Ao executar neste modo, a métrica **`Corner Error (px)`** é calculada medindo a distância real em pixels entre o resultado estimado pelo pipeline e a transformação Ground Truth matemática.
+
+---
+
+### 3. Executar um Experimento de GridSearch (Varredura em Lote)
 Para testar automaticamente combinações de parâmetros (estudo de ablação), configure a matriz em `config/gridsearch_experiment.yaml` e execute:
 
 ```bash
