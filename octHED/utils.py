@@ -80,11 +80,8 @@ def load_checkpoint(net : Module, opt, path='./checkpoint.pth', map_location='cu
     :return:     Checkpoint epoch number.
     """
     if os.path.isfile(path):
-        print('=> Loading checkpoint {}...'.format(path))
-        checkpoint = torch.load(path, map_location=map_location)
-        print(checkpoint['net'].keys())
-        net.load_state_dict(state_dict= checkpoint['net'])
-        # opt.load_state_dict(checkpoint['opt'])
+        checkpoint = torch.load(path, map_location=map_location, weights_only=False)
+        net.load_state_dict(state_dict=checkpoint['net'])
         return checkpoint['epoch']
     else:
         raise ValueError('=> No checkpoint found at {}.'.format(path))

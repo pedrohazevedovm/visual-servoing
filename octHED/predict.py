@@ -4,6 +4,7 @@ import cv2 as cv
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torchvision.utils import save_image
 
 from octHED.models.octave_model_full import OCTHEDFULL
@@ -34,25 +35,28 @@ class Predictor:
         net: Optional[nn.Module] = None,
         model_path: Optional[str] = None,
         device: Optional[str] = None,
+        lite_mode: bool = False,
     ):
         if device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         else:
             self.device = device
 
+        self.lite_mode = lite_mode
+
         if net is not None:
             self.net = net
         else:
             if model_path == 'hed':
                 ckpt_path = DEFAULT_MODEL_PATH_HED
-                self.net = torch.nn.DataParallel(HED(self.device))
+                self.net = torch.nn.DataParallel(HED(self.device, lite_mode=lite_mode))
             else:
                 ckpt_path = (
                     DEFAULT_MODEL_PATH
                     if (model_path is None or model_path == 'octhed')
                     else model_path
                 )
-                self.net = torch.nn.DataParallel(OCTHEDFULL(self.device, alpha=0.5))
+                self.net = torch.nn.DataParallel(OCTHEDFULL(self.device, alpha=0.5, lite_mode=lite_mode))
 
             load_checkpoint(
                 self.net,
@@ -146,6 +150,8 @@ class Predictor:
         image: Union[str, np.ndarray, torch.Tensor],
         save: bool = False,
         save_path: Optional[str] = None,
+        scale_factor: float = 1.0,
+        use_amp: bool = True,
     ) -> torch.Tensor:
         """
         Runs edge detection prediction on an image.
@@ -154,6 +160,8 @@ class Predictor:
             image (str | np.ndarray | torch.Tensor): Image file path, BGR numpy array, or PyTorch RGB Tensor.
             save (bool): If True, saves the predicted image. Default False.
             save_path (str, optional): Custom path to save image.
+            scale_factor (float): Downsampling scale factor (e.g. 0.5 for 4x faster execution). Default 1.0.
+            use_amp (bool): If True and on CUDA, uses Automatic Mixed Precision (FP16). Default True.
 
         Returns:
             torch.Tensor: Prediction output tensor (shape 1x1xHxW).
@@ -163,9 +171,28 @@ class Predictor:
         else:
             tensor_img = self.preprocess(image)
 
+        orig_h, orig_w = tensor_img.shape[2], tensor_img.shape[3]
+
+        if scale_factor < 1.0:
+            tensor_img_scaled = F.interpolate(
+                tensor_img, scale_factor=scale_factor, mode="bilinear", align_corners=False
+            )
+        else:
+            tensor_img_scaled = tensor_img
+
         with torch.inference_mode():
-            pred_list = self.net(tensor_img)
-            prediction = pred_list[-1]
+            if use_amp and (self.device == 'cuda' or (isinstance(self.device, torch.device) and self.device.type == 'cuda')):
+                with torch.amp.autocast('cuda', dtype=torch.float16):
+                    pred_list = self.net(tensor_img_scaled)
+            else:
+                pred_list = self.net(tensor_img_scaled)
+
+            prediction = pred_list[-1].float()
+
+        if scale_factor < 1.0:
+            prediction = F.interpolate(
+                prediction, size=(orig_h, orig_w), mode="bilinear", align_corners=False
+            )
 
         if save:
             if save_path is None:
@@ -189,6 +216,8 @@ class Predictor:
         images: Union[list, tuple, torch.Tensor],
         save: bool = False,
         save_paths: Optional[list[str]] = None,
+        scale_factor: float = 1.0,
+        use_amp: bool = True,
     ) -> torch.Tensor:
         """
         Runs edge detection prediction on a batch of images in a single GPU pass.
@@ -197,6 +226,8 @@ class Predictor:
             images (list | tuple | torch.Tensor): List of image file paths, BGR numpy arrays, or stacked/list PyTorch Tensors.
             save (bool): If True, saves the predicted images. Default False.
             save_paths (list[str], optional): Custom list of paths to save images.
+            scale_factor (float): Downsampling scale factor (e.g. 0.5 for 4x faster execution). Default 1.0.
+            use_amp (bool): If True and on CUDA, uses Automatic Mixed Precision (FP16). Default True.
 
         Returns:
             torch.Tensor: Prediction output tensor (shape Nx1xHxW).
@@ -209,9 +240,28 @@ class Predictor:
         else:
             tensor_img = self.preprocess_batch(images)
 
+        orig_h, orig_w = tensor_img.shape[2], tensor_img.shape[3]
+
+        if scale_factor < 1.0:
+            tensor_img_scaled = F.interpolate(
+                tensor_img, scale_factor=scale_factor, mode="bilinear", align_corners=False
+            )
+        else:
+            tensor_img_scaled = tensor_img
+
         with torch.inference_mode():
-            pred_list = self.net(tensor_img)
-            prediction = pred_list[-1]  # shape (N, 1, H, W)
+            if use_amp and (self.device == 'cuda' or (isinstance(self.device, torch.device) and self.device.type == 'cuda')):
+                with torch.amp.autocast('cuda', dtype=torch.float16):
+                    pred_list = self.net(tensor_img_scaled)
+            else:
+                pred_list = self.net(tensor_img_scaled)
+
+            prediction = pred_list[-1].float()  # shape (N, 1, H_scaled, W_scaled)
+
+        if scale_factor < 1.0:
+            prediction = F.interpolate(
+                prediction, size=(orig_h, orig_w), mode="bilinear", align_corners=False
+            )
 
         if save:
             if save_paths is None:
