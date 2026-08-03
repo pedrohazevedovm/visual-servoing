@@ -78,7 +78,8 @@ visual-servoing/
 │   ├── evaluation/                  # Módulos de avaliação quantitativa e geometria
 │   │   ├── homography.py            # Estimador de Homografia RANSAC e vetor e = s - s*
 │   │   ├── metrics.py               # Cálculo de métricas (Matches, Inliers %, Corner Error, Matrix Error)
-│   │   └── reporter.py              # Gerador de relatórios CSV, JSON e gráficos
+│   │   ├── reporter.py              # Gerador de relatórios CSV, JSON e gráficos
+│   │   └── wandb_logger.py          # Integração com Weights & Biases (wandb.ai)
 │   └── experiments/                 # Executores de experimentos de alto nível
 │       ├── run_pipeline.py          # Script para executar 1 pipeline individual
 │       └── run_gridsearch.py        # Script para executar busca GridSearch automatizada
@@ -164,6 +165,54 @@ python src/experiments/run_gridsearch.py --config config/gridsearch_experiment.y
 - Mede o tempo exato de execução de cada etapa do pipeline em milissegundos.
 - Salva o relatório consolidado em `runs/gridsearch_YYYY-MM-DD_HH-MM-SS/gridsearch_summary.csv`.
 - Gera os gráficos e detalhes individuais em JSON nas subpastas `config_001`, `config_002`, ...
+
+---
+
+## 📈 Registro e Comparação de Runs no Weights & Biases (wandb.ai)
+
+O framework conta com suporte nativo ao **Weights & Biases (`wandb.ai`)** para salvar, acompanhar, visualizar e comparar experimentos de maneira estruturada.
+
+### 🌟 Recursos de Integração no W&B:
+* **Hiperparâmetros Estruturados (`wandb.config`)**: Registra todas as configurações de pipeline, etapas ativas e parâmetros de warping sintético (`angle`, `scale`, `tx`, `ty`).
+* **Métricas Escalares & Profiling de Tempo (`step_times/*`)**: Acompanha número de correspondências, inliers %, erro da homografia, erro dos cantos em pixels e o tempo individual consumido por cada etapa do pipeline.
+* **Imagens & Visualizações (`wandb.Image`)**: Salva o gráfico gerado com os pontos correspondentes e a caixa delimitadora transformada.
+* **Upload de Artefatos Versionados (`wandb.Artifact`)**: Armazena os diretórios de saída da execução contendo o arquivo `metrics.json` e a imagem `pipeline_result.png`.
+* **Agrupamento & Matriz de Comparação em GridSearch**: Agrupa execuções de um mesmo GridSearch sob o mesmo grupo (`group`) e cria uma **`wandb.Table`** consolidada com a comparação lado a lado de todas as combinações.
+
+### 🚀 Como Ativar o Logging no W&B:
+
+#### 1. Via Flag da Linha de Comando (`--wandb`):
+```bash
+# Execução individual com logging no W&B
+poetry run python src/experiments/run_pipeline.py \
+  --single src/assets/vaso_1.jpeg \
+  --angle 15 \
+  --wandb \
+  --wandb-project "visual-servoing" \
+  --wandb-entity "phavm-ufpe"
+
+# GridSearch com logging e agrupamento no W&B
+poetry run python src/experiments/run_gridsearch.py \
+  --config config/gridsearch_experiment.yaml \
+  --wandb
+```
+
+#### 2. Via Arquivo de Configuração YAML:
+Adicione ou ajuste o bloco `wandb:` no arquivo de configuração:
+```yaml
+wandb:
+  enabled: true
+  project: "visual-servoing"
+  entity: "phavm-ufpe"
+```
+
+#### 3. Parâmetros CLI do W&B:
+* `--wandb`: Ativa o envio para o Weights & Biases.
+* `--wandb-project`: Nome do projeto no W&B (padrão: `"visual-servoing"`).
+* `--wandb-entity`: Usuário ou time no W&B (ex: `"phavm-ufpe"`).
+* `--wandb-group`: Nome do grupo para agrupar runs relacionados no dashboard.
+* `--wandb-name`: Nome exibido para a run.
+* `--wandb-mode`: Modo de execução do W&B (`online`, `offline`, `disabled`).
 
 ---
 
