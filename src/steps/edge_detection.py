@@ -40,6 +40,7 @@ class EdgeDetectionStep(BaseStep):
         scale_factor: float = 1.0,
         use_amp: bool = True,
         lite_mode: bool = False,
+        use_nms: bool = False,
         **kwargs,
     ):
         super().__init__(name=name, enabled=enabled, **kwargs)
@@ -50,6 +51,7 @@ class EdgeDetectionStep(BaseStep):
         self.scale_factor = scale_factor
         self.use_amp = use_amp
         self.lite_mode = lite_mode
+        self.use_nms = use_nms
 
         # Pre-warm model weights into memory during initialization so I/O disk loading is excluded from step timing
         if self.enabled and self.method in ("octhed", "hed"):
@@ -71,6 +73,7 @@ class EdgeDetectionStep(BaseStep):
             save=self.save_predictions,
             scale_factor=self.scale_factor,
             use_amp=self.use_amp,
+            use_nms=self.use_nms,
         )
         edge_np = edge_tensor.squeeze().cpu().numpy()
         return np.clip(edge_np * 255.0, 0, 255).astype(np.uint8)
@@ -86,6 +89,7 @@ class EdgeDetectionStep(BaseStep):
             save=self.save_predictions,
             scale_factor=self.scale_factor,
             use_amp=self.use_amp,
+            use_nms=self.use_nms,
         )
         edge_np = edge_tensor.squeeze().cpu().numpy()
         return np.clip(edge_np * 255.0, 0, 255).astype(np.uint8)
@@ -107,6 +111,7 @@ class EdgeDetectionStep(BaseStep):
                 save=self.save_predictions,
                 scale_factor=self.scale_factor,
                 use_amp=self.use_amp,
+                use_nms=self.use_nms,
             )
 
             edge_ref_np = edge_tensors[0].squeeze().cpu().numpy()

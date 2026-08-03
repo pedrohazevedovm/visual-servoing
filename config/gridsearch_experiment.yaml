@@ -24,3 +24,9 @@ defaults:
   feature_matching_params:
     max_num_keypoints: 2048
     filter_threshold: 0.1
+
+wandb:
+  enabled: true
+  project: "visual-servoing"
+  entity: "phavm-ufpe"
+

@@ -1,0 +1,118 @@
+_wandb:
+    value:
+        cli_version: 0.28.1
+        e:
+            pfcx62vfjouq0w6pea4tyac14htt8i6a:
+                args:
+                    - --single
+                    - src/assets/vaso_1.jpeg
+                    - --angle
+                    - "15"
+                    - --tx
+                    - "10"
+                codePath: src/experiments/run_pipeline.py
+                codePathLocal: src/experiments/run_pipeline.py
+                cpu_count: 14
+                cpu_count_logical: 20
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "277534498816"
+                        used: "94553313280"
+                email: phavm@softex.cin.ufpe.br
+                executable: /home/phavm/.cache/pypoetry/virtualenvs/visual-servoing-vWx-_M69-py3.12/bin/python
+                git:
+                    commit: 800925aa29c34bb17ec27b368437d741facaacbd
+                    remote: git@github.com:pedrohazevedovm/visual-servoing.git
+                gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 2560
+                      memoryTotal: "6439305216"
+                      name: NVIDIA GeForce RTX 4050 Laptop GPU
+                      uuid: GPU-afab673a-48d5-a750-05a1-c90ef8601d07
+                host: pc091-ubu
+                memory:
+                    total: "33314832384"
+                os: Linux-6.5.0-45-generic-x86_64-with-glibc2.35
+                program: /home/phavm/Documents/dev/visual-servoing/src/experiments/run_pipeline.py
+                python: CPython 3.12.13
+                root: /home/phavm/Documents/dev/visual-servoing
+                startedAt: "2026-08-03T22:32:46.186940Z"
+                writerId: pfcx62vfjouq0w6pea4tyac14htt8i6a
+        m: []
+        python_version: 3.12.13
+        t:
+            "1":
+                - 1
+                - 41
+                - 79
+            "2":
+                - 1
+                - 41
+                - 79
+            "3":
+                - 2
+                - 15
+                - 16
+                - 62
+            "4": 3.12.13
+            "5": 0.28.1
+            "10":
+                - 20
+            "12": 0.28.1
+            "13": linux-x86_64
+angle_deg:
+    value: 15
+pipeline_config:
+    value:
+        - enabled: true
+          params:
+            pct_h: 0.8
+            pct_w: 0.8
+          type: roi_crop
+        - enabled: false
+          params: {}
+          type: histogram_matching
+        - enabled: true
+          params:
+            d: 9
+            sigmaColor: 75
+            sigmaSpace: 75
+          type: bilateral_filter
+        - enabled: true
+          params:
+            lite_mode: false
+            method: octhed
+            scale_factor: 1
+            threshold1: 50
+            threshold2: 150
+            use_amp: false
+            use_nms: true
+          type: edge_detection
+        - enabled: true
+          params:
+            algorithm: boruvka
+            compactness: 10
+            n_superpixels: 50
+          type: superpixel_reduction
+        - enabled: true
+          params:
+            depth_confidence: 0.8
+            filter_threshold: 0.1
+            max_num_keypoints: 512
+            mp: false
+            n_layers: 6
+            width_confidence: 0.9
+          type: feature_matching
+scale:
+    value: 1
+single_image_path:
+    value: src/assets/vaso_1.jpeg
+synthetic_mode:
+    value: true
+tx:
+    value: 10
+ty:
+    value: -15

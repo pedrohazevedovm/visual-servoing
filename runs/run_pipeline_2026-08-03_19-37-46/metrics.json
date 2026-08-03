@@ -1,0 +1,87 @@
+{
+  "config": [
+    {
+      "type": "roi_crop",
+      "enabled": true,
+      "params": {
+        "pct_w": 0.8,
+        "pct_h": 0.8
+      }
+    },
+    {
+      "type": "histogram_matching",
+      "enabled": false,
+      "params": {}
+    },
+    {
+      "type": "bilateral_filter",
+      "enabled": true,
+      "params": {
+        "d": 9,
+        "sigmaColor": 75.0,
+        "sigmaSpace": 75.0
+      }
+    },
+    {
+      "type": "edge_detection",
+      "enabled": true,
+      "params": {
+        "method": "none",
+        "threshold1": 50.0,
+        "threshold2": 150.0,
+        "scale_factor": 0.5,
+        "use_amp": false,
+        "lite_mode": false,
+        "use_nms": true
+      }
+    },
+    {
+      "type": "superpixel_reduction",
+      "enabled": true,
+      "params": {
+        "algorithm": "boruvka",
+        "n_superpixels": 50,
+        "compactness": 10.0
+      }
+    },
+    {
+      "type": "feature_matching",
+      "enabled": true,
+      "params": {
+        "max_num_keypoints": 512,
+        "filter_threshold": 0.1,
+        "depth_confidence": 0.8,
+        "width_confidence": 0.9,
+        "n_layers": 6,
+        "mp": false
+      }
+    }
+  ],
+  "matches_count": 149,
+  "inliers_count": 33,
+  "inlier_ratio_pct": 22.15,
+  "stop_layer": 6,
+  "corner_error_px": 4.0137,
+  "homography_matrix_error": 3.249401,
+  "servoing_error_norm": 246.012482,
+  "servoing_error_norm_gt": 243.079926,
+  "servoing_error_diff_norm": 3.249406,
+  "servoing_error_vector": [
+    -0.029684603214263916,
+    0.2560148239135742,
+    -120.6849136352539,
+    -0.25930261611938477,
+    -0.03794991970062256,
+    214.37620544433594,
+    9.374572300657746e-07,
+    -2.7317435069562634e-06
+  ],
+  "total_time_sec": 1.0205,
+  "step_times": {
+    "roi_crop": 0.0001,
+    "bilateral_filter": 0.0401,
+    "edge_detection": 0.0,
+    "superpixel_reduction": 0.4209,
+    "feature_matching": 0.5595
+  }
+}

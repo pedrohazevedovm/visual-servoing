@@ -42,6 +42,7 @@ scipy = "^1.11.0"
 pyaml = "^25.7.0"
 ptflops = "^0.7.5"
 imageio = "^2.37.2"
+wandb = ">=0.24"
 
 # Mudança de Fonte para CUDA 12.1 / 12.4 (Ampla distribuição de binários para Linux e Windows)
 [[tool.poetry.source]]

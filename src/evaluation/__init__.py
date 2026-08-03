@@ -4,10 +4,12 @@ from src.evaluation.homography import (
 )
 from src.evaluation.metrics import compute_pipeline_metrics
 from src.evaluation.reporter import Reporter
+from src.evaluation.wandb_logger import WandbLogger
 
 __all__ = [
     "estimate_homography",
     "extract_uncalibrated_servoing_error",
     "compute_pipeline_metrics",
     "Reporter",
+    "WandbLogger",
 ]

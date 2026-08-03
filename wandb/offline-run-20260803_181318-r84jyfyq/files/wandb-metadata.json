@@ -1,0 +1,154 @@
+{
+    "os": "Linux-6.5.0-45-generic-x86_64-with-glibc2.35",
+    "python": "3.12.13",
+    "heartbeatAt": "2026-08-03T21:13:18.794490",
+    "startedAt": "2026-08-03T21:13:18.728648",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--config",
+        "config/gridsearch_superpixels.yaml",
+        "--wandb",
+        "--wandb-mode",
+        "offline"
+    ],
+    "state": "running",
+    "program": "/home/phavm/Documents/dev/visual-servoing/src/experiments/run_gridsearch.py",
+    "codePathLocal": "src/experiments/run_gridsearch.py",
+    "codePath": "src/experiments/run_gridsearch.py",
+    "git": {
+        "remote": "git@github.com:pedrohazevedovm/visual-servoing.git",
+        "commit": "800925aa29c34bb17ec27b368437d741facaacbd"
+    },
+    "email": "phavm@softex.cin.ufpe.br",
+    "root": "/home/phavm/Documents/dev/visual-servoing",
+    "host": "pc091-ubu",
+    "username": "phavm",
+    "executable": "/home/phavm/.cache/pypoetry/virtualenvs/visual-servoing-vWx-_M69-py3.12/bin/python",
+    "cpu_count": 14,
+    "cpu_count_logical": 20,
+    "cpu_freq": {
+        "current": 1608.05695,
+        "min": 800.0,
+        "max": 4300.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2909.102,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 3385.324,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 801.217,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 1246.677,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 3641.634,
+            "min": 800.0,
+            "max": 4900.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 4900.0
+        },
+        {
+            "current": 3086.315,
+            "min": 800.0,
+            "max": 4900.0
+        },
+        {
+            "current": 3907.57,
+            "min": 800.0,
+            "max": 4900.0
+        },
+        {
+            "current": 2935.186,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2991.517,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 3076.407,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 800.934,
+            "min": 800.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2466.776,
+            "min": 800.0,
+            "max": 3600.0
+        },
+        {
+            "current": 1402.797,
+            "min": 800.0,
+            "max": 3600.0
+        },
+        {
+            "current": 1429.19,
+            "min": 800.0,
+            "max": 3600.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3600.0
+        },
+        {
+            "current": 800.214,
+            "min": 800.0,
+            "max": 3600.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3600.0
+        },
+        {
+            "current": 800.0,
+            "min": 800.0,
+            "max": 3600.0
+        },
+        {
+            "current": 1877.986,
+            "min": 800.0,
+            "max": 3600.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 258.4741439819336,
+            "used": 87.87485122680664
+        }
+    },
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+            "memory_total": 6439305216
+        }
+    ],
+    "memory": {
+        "total": 31.02685546875
+    }
+}

@@ -6,7 +6,7 @@ pipeline:
       pct_h: 0.8
 
   - type: "histogram_matching"
-    enabled: true
+    enabled: false
     params: {}
 
   - type: "bilateral_filter"
@@ -19,12 +19,13 @@ pipeline:
   - type: "edge_detection"
     enabled: true
     params:
-      method: "octhed" # Options: 'canny', 'octhed', 'none'
+      method: "none" # Options: 'canny', 'octhed', 'none'
       threshold1: 50.0
       threshold2: 150.0
       scale_factor: 0.5
-      use_amp: true  
-      lite_mode: true
+      use_amp: false 
+      lite_mode: false
+      use_nms: true
 
   - type: "superpixel_reduction"
     enabled: true
@@ -42,3 +43,9 @@ pipeline:
       width_confidence: 0.90
       n_layers: 6
       mp: false
+
+wandb:
+  enabled: true
+  project: "visual-servoing"
+  entity: "phavm-ufpe"
+
