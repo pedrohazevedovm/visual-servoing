@@ -18,6 +18,7 @@ from src.core.pipeline import Pipeline
 from src.core.registry import StepRegistry
 from src.evaluation.metrics import compute_pipeline_metrics
 from src.evaluation.reporter import Reporter
+from src.evaluation.wandb_logger import WandbLogger
 
 
 def build_pipeline_from_combo(combo: Dict[str, Any], defaults: Dict[str, Any]) -> Pipeline:
@@ -72,7 +73,15 @@ def build_pipeline_from_combo(combo: Dict[str, Any], defaults: Dict[str, Any]) -
     return Pipeline(steps=steps, config=combo)
 
 
-def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):
+def run_gridsearch_experiment(
+    config_path: Path,
+    output_dir: Path = None,
+    use_wandb: bool = False,
+    wandb_project: str = "visual-servoing",
+    wandb_entity: str = None,
+    wandb_group: str = None,
+    wandb_mode: str = None,
+):
     print(f"Loading GridSearch configuration from: {config_path}")
     with open(config_path, "r", encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
@@ -81,6 +90,15 @@ def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):
     data_cfg = config_data.get("data", {})
     grid_cfg = config_data.get("grid", {})
     defaults = config_data.get("defaults", {})
+    wandb_cfg = config_data.get("wandb", {})
+
+    # Priority: CLI argument > YAML config
+    enable_wandb = use_wandb or wandb_cfg.get("enabled", False)
+    project = wandb_project or wandb_cfg.get("project", "visual-servoing")
+    entity = wandb_entity or wandb_cfg.get("entity", None)
+
+    timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    group_name = wandb_group or wandb_cfg.get("group", f"{exp_name}_{timestamp_str}")
 
     ref_path = Path(data_cfg.get("ref_image", "src/assets/vaso_1.jpeg"))
     cur_path = Path(data_cfg.get("cur_image", "src/assets/vaso_2.jpeg"))
@@ -98,8 +116,7 @@ def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):
     print(f"\n=> Total GridSearch Combinations to Evaluate: {len(combinations)}\n")
 
     if output_dir is None:
-        run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        output_dir = Path(f"runs/gridsearch_{run_id}")
+        output_dir = Path(f"runs/gridsearch_{timestamp_str}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,6 +158,28 @@ def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):
         )
         fig.savefig(combo_dir / "plot.png", bbox_inches="tight", dpi=120)
 
+        # Log individual combination run to W&B
+        if enable_wandb:
+            wb_logger = WandbLogger(
+                enabled=True,
+                project=project,
+                entity=entity,
+                group=group_name,
+                job_type="gridsearch_combo",
+                name=f"{exp_name}_{combo_id}",
+                tags=["gridsearch", exp_name],
+                config=combo,
+                mode=wandb_mode,
+            )
+            wb_logger.log_run_results(
+                metrics=metrics,
+                config=combo,
+                fig=fig,
+                output_dir=combo_dir,
+                upload_artifacts=False,
+            )
+            wb_logger.finish()
+
     # Export consolidated summary CSV and JSON
     csv_path = output_dir / "gridsearch_summary.csv"
     Reporter.save_csv_summary(summary_rows, csv_path)
@@ -149,6 +188,23 @@ def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):
     json_path = output_dir / "gridsearch_details.json"
     Reporter.save_json(all_results, json_path)
     print(f"=> Summary JSON saved to: {json_path}")
+
+    # Log master summary run with wandb.Table to W&B
+    if enable_wandb:
+        wb_summary_logger = WandbLogger(
+            enabled=True,
+            project=project,
+            entity=entity,
+            group=group_name,
+            job_type="gridsearch_summary",
+            name=f"{exp_name}_SUMMARY",
+            tags=["gridsearch", "summary", exp_name],
+            config={"experiment_name": exp_name, "num_combinations": len(combinations), "grid": grid_cfg},
+            mode=wandb_mode,
+        )
+        wb_summary_logger.log_gridsearch_summary_table(summary_rows, table_name="gridsearch_summary_table")
+        wb_summary_logger.finish()
+
     print(f"\n=> GridSearch Complete! All artifacts saved under: {output_dir}\n")
 
 
@@ -161,9 +217,20 @@ if __name__ == "__main__":
         help="Path to GridSearch YAML config",
     )
     parser.add_argument("--output", type=str, default=None, help="Output directory")
+    parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (wandb.ai)")
+    parser.add_argument("--wandb-project", type=str, default="visual-servoing", help="W&B project name")
+    parser.add_argument("--wandb-entity", type=str, default=None, help="W&B entity / team")
+    parser.add_argument("--wandb-group", type=str, default=None, help="W&B experiment group name")
+    parser.add_argument("--wandb-mode", type=str, default=None, help="W&B mode: online, offline, disabled")
 
     args = parser.parse_args()
     run_gridsearch_experiment(
         config_path=Path(args.config),
         output_dir=Path(args.output) if args.output else None,
+        use_wandb=args.wandb,
+        wandb_project=args.wandb_project,
+        wandb_entity=args.wandb_entity,
+        wandb_group=args.wandb_group,
+        wandb_mode=args.wandb_mode,
     )
+

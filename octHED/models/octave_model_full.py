@@ -29,8 +29,10 @@ class OCTHEDFULL(nn.Module):
 
     def __init__(self, device, alpha, 
                  octave_layers=['conv2_1', 'conv2_2', 'conv3_1', 'conv3_2', 'conv3_3', 'conv4_1', 'conv4_2',
-                                'conv4_3', 'conv5_1', 'conv5_2', 'conv5_3']):
+                                'conv4_3', 'conv5_1', 'conv5_2', 'conv5_3'],
+                 lite_mode: bool = False):
         super(OCTHEDFULL, self).__init__()
+        self.lite_mode = lite_mode
         # Layers.
         self.relu = nn.ReLU
         self.maxpool_octave = MaxPoolTuple()
@@ -322,24 +324,10 @@ class OCTHEDFULL(nn.Module):
         conv4_3 = abstract_forward(
             conv=self.conv4_3, x=conv4_2, activation=self.relu()
         )  # Side output 4
-        pool4 = self.maxpool_octave(conv4_3)
-
-        conv5_1 = abstract_forward(
-            conv=self.conv5_1, x=pool4, activation=self.relu()
-        )
-        conv5_2 = abstract_forward(
-            conv=self.conv5_2, x=conv5_1, activation=self.relu()
-        )
-        conv5_3 = abstract_forward(
-            conv=self.conv5_3, x=conv5_2, activation=self.relu()
-        )  # Side output 5
-
         score_dsn1 = self.score_dsn1(conv1_2)
-        
         score_dsn2 = self.score_dsn2(conv2_2)[0]
         score_dsn3 = self.score_dsn3(conv3_3)[0]
         score_dsn4 = self.score_dsn4(conv4_3)[0]
-        score_dsn5 = self.score_dsn5(conv5_3)[0]
 
         upsample2 = torch.nn.functional.conv_transpose2d(
             score_dsn2, self.weight_deconv2, stride=2
@@ -349,9 +337,6 @@ class OCTHEDFULL(nn.Module):
         )
         upsample4 = torch.nn.functional.conv_transpose2d(
             score_dsn4, self.weight_deconv4, stride=8
-        )
-        upsample5 = torch.nn.functional.conv_transpose2d(
-            score_dsn5, self.weight_deconv5, stride=16
         )
 
         # Aligned cropping.
@@ -379,22 +364,46 @@ class OCTHEDFULL(nn.Module):
             self.crop4_margin : self.crop4_margin + image_h,
             self.crop4_margin : self.crop4_margin + image_w,
         ]
-        crop5 = upsample5[
-            :,
-            :,
-            self.crop5_margin : self.crop5_margin + image_h,
-            self.crop5_margin : self.crop5_margin + image_w,
-        ]
 
-        # Concatenate according to channels.
-        fuse_cat = torch.cat((crop1, crop2, crop3, crop4, crop5), dim=1)
-        fuse = self.score_final(
-            fuse_cat
-        )  # Shape: [batch_size, 1, image_h, image_w].
-        results = [crop1, crop2, crop3, crop4, crop5, fuse]
-        results = [torch.sigmoid(r) for r in results]
-        # results = torch.sigmoid(fuse)
-        return results
+        if self.lite_mode:
+            # Stage 5 truncated! Fuse 4 crops using sliced score_final weight
+            fuse_cat = torch.cat((crop1, crop2, crop3, crop4), dim=1)
+            fuse = nn.functional.conv2d(
+                fuse_cat,
+                self.score_final.weight[:, :4, :, :],
+                self.score_final.bias,
+            )
+        else:
+            pool4 = self.maxpool_octave(conv4_3)
+            conv5_1 = abstract_forward(
+                conv=self.conv5_1, x=pool4, activation=self.relu()
+            )
+            conv5_2 = abstract_forward(
+                conv=self.conv5_2, x=conv5_1, activation=self.relu()
+            )
+            conv5_3 = abstract_forward(
+                conv=self.conv5_3, x=conv5_2, activation=self.relu()
+            )  # Side output 5
+
+            score_dsn5 = self.score_dsn5(conv5_3)[0]
+            upsample5 = torch.nn.functional.conv_transpose2d(
+                score_dsn5, self.weight_deconv5, stride=16
+            )
+            crop5 = upsample5[
+                :,
+                :,
+                self.crop5_margin : self.crop5_margin + image_h,
+                self.crop5_margin : self.crop5_margin + image_w,
+            ]
+            fuse_cat = torch.cat((crop1, crop2, crop3, crop4, crop5), dim=1)
+            fuse = self.score_final(fuse_cat)
+
+        if self.training:
+            results = [crop1, crop2, crop3, crop4] if self.lite_mode else [crop1, crop2, crop3, crop4, crop5]
+            results.append(fuse)
+            return [torch.sigmoid(r) for r in results]
+        else:
+            return [torch.sigmoid(fuse)]
 
 
 def make_bilinear_weights(size, num_channels):

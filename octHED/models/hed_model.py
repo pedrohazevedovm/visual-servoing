@@ -6,10 +6,11 @@ from torch import nn
 class HED(nn.Module):
     """HED network."""
 
-    def __init__(self, device):
+    def __init__(self, device, lite_mode: bool = False):
         super(HED, self).__init__()
 
         self.device = device
+        self.lite_mode = lite_mode
         # Layers.
         self.conv1_1 = nn.Conv2d(3, 64, 3, padding=35)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
@@ -159,17 +160,10 @@ class HED(nn.Module):
         conv4_1 = self.relu(self.conv4_1(pool3))
         conv4_2 = self.relu(self.conv4_2(conv4_1))
         conv4_3 = self.relu(self.conv4_3(conv4_2))  # Side output 4.
-        pool4 = self.maxpool(conv4_3)
-
-        conv5_1 = self.relu(self.conv5_1(pool4))
-        conv5_2 = self.relu(self.conv5_2(conv5_1))
-        conv5_3 = self.relu(self.conv5_3(conv5_2))  # Side output 5.
-
         score_dsn1 = self.score_dsn1(conv1_2)
         score_dsn2 = self.score_dsn2(conv2_2)
         score_dsn3 = self.score_dsn3(conv3_3)
         score_dsn4 = self.score_dsn4(conv4_3)
-        score_dsn5 = self.score_dsn5(conv5_3)
 
         upsample2 = torch.nn.functional.conv_transpose2d(
             score_dsn2, self.weight_deconv2, stride=2
@@ -179,9 +173,6 @@ class HED(nn.Module):
         )
         upsample4 = torch.nn.functional.conv_transpose2d(
             score_dsn4, self.weight_deconv4, stride=8
-        )
-        upsample5 = torch.nn.functional.conv_transpose2d(
-            score_dsn5, self.weight_deconv5, stride=16
         )
 
         # Aligned cropping.
@@ -209,22 +200,39 @@ class HED(nn.Module):
             self.crop4_margin : self.crop4_margin + image_h,
             self.crop4_margin : self.crop4_margin + image_w,
         ]
-        crop5 = upsample5[
-            :,
-            :,
-            self.crop5_margin : self.crop5_margin + image_h,
-            self.crop5_margin : self.crop5_margin + image_w,
-        ]
 
-        # Concatenate according to channels.
-        fuse_cat = torch.cat((crop1, crop2, crop3, crop4, crop5), dim=1)
-        fuse = self.score_final(
-            fuse_cat
-        )  # Shape: [batch_size, 1, image_h, image_w].
-        # results = [crop1, crop2, crop3, crop4, crop5, fuse]
-        # results = [torch.sigmoid(r) for r in results]
-        results = torch.sigmoid(fuse)
-        return results
+        if self.lite_mode:
+            fuse_cat = torch.cat((crop1, crop2, crop3, crop4), dim=1)
+            fuse = nn.functional.conv2d(
+                fuse_cat,
+                self.score_final.weight[:, :4, :, :],
+                self.score_final.bias,
+            )
+        else:
+            pool4 = self.maxpool(conv4_3)
+            conv5_1 = self.relu(self.conv5_1(pool4))
+            conv5_2 = self.relu(self.conv5_2(conv5_1))
+            conv5_3 = self.relu(self.conv5_3(conv5_2))  # Side output 5.
+
+            score_dsn5 = self.score_dsn5(conv5_3)
+            upsample5 = torch.nn.functional.conv_transpose2d(
+                score_dsn5, self.weight_deconv5, stride=16
+            )
+            crop5 = upsample5[
+                :,
+                :,
+                self.crop5_margin : self.crop5_margin + image_h,
+                self.crop5_margin : self.crop5_margin + image_w,
+            ]
+            fuse_cat = torch.cat((crop1, crop2, crop3, crop4, crop5), dim=1)
+            fuse = self.score_final(fuse_cat)
+
+        if self.training:
+            results = [crop1, crop2, crop3, crop4] if self.lite_mode else [crop1, crop2, crop3, crop4, crop5]
+            results.append(fuse)
+            return [torch.sigmoid(r) for r in results]
+        else:
+            return [torch.sigmoid(fuse)]
 
 
 def make_bilinear_weights(size, num_channels):
