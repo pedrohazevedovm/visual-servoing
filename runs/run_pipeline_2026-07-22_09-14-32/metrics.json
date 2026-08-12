@@ -1,0 +1,74 @@
+{
+  "config": [
+    {
+      "type": "histogram_matching",
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "type": "bilateral_filter",
+      "enabled": true,
+      "params": {
+        "d": 9,
+        "sigmaColor": 75.0,
+        "sigmaSpace": 75.0
+      }
+    },
+    {
+      "type": "edge_detection",
+      "enabled": false,
+      "params": {
+        "method": "canny",
+        "threshold1": 50.0,
+        "threshold2": 150.0
+      }
+    },
+    {
+      "type": "superpixel_reduction",
+      "enabled": false,
+      "params": {
+        "algorithm": "boruvka",
+        "n_superpixels": 50,
+        "compactness": 50.0
+      }
+    },
+    {
+      "type": "roi_crop",
+      "enabled": false,
+      "params": {
+        "pct_w": 0.3,
+        "pct_h": 0.5
+      }
+    },
+    {
+      "type": "feature_matching",
+      "enabled": true,
+      "params": {
+        "max_num_keypoints": 512,
+        "filter_threshold": 0.1
+      }
+    }
+  ],
+  "matches_count": 300,
+  "inliers_count": 202,
+  "inlier_ratio_pct": 67.33,
+  "stop_layer": 5,
+  "corner_error_px": null,
+  "servoing_error_norm": 29.80212,
+  "servoing_error_vector": [
+    -0.026671946048736572,
+    0.047913748770952225,
+    -10.82441234588623,
+    -0.022858215495944023,
+    -0.021321475505828857,
+    27.766786575317383,
+    1.5237506545418e-07,
+    2.45678165811114e-05
+  ],
+  "total_time_sec": 0.9461,
+  "step_times": {
+    "histogram_matching": 0.3904,
+    "bilateral_filter": 0.0464,
+    "feature_matching": 0.5093
+  }
+}

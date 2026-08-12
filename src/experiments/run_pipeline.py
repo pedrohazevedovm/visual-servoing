@@ -15,6 +15,7 @@ from lightglue.utils import load_image
 # Ensure steps are imported to trigger @register_step
 import src.steps
 from src.core.pipeline import Pipeline
+from src.core.synthetic import SyntheticTransformGenerator
 from src.evaluation.metrics import compute_pipeline_metrics
 from src.evaluation.reporter import Reporter
 
@@ -23,6 +24,11 @@ def run_single_experiment(
     config_path: Path,
     ref_image_path: Path = None,
     cur_image_path: Path = None,
+    single_image_path: Path = None,
+    angle_deg: float = 10.0,
+    scale: float = 1.0,
+    tx: float = 20.0,
+    ty: float = -15.0,
     output_dir: Path = None,
 ):
     print(f"Loading pipeline configuration from: {config_path}")
@@ -34,20 +40,31 @@ def run_single_experiment(
 
     print(f"Instantiated Pipeline:\n{pipeline}")
 
-    if ref_image_path is None:
-        ref_image_path = Path("src/assets/vaso_1.jpeg")
-    if cur_image_path is None:
-        cur_image_path = Path("src/assets/vaso_2.jpeg")
+    ground_truth_H = None
 
-    print(f"Loading reference image: {ref_image_path}")
-    print(f"Loading current image:   {cur_image_path}")
-    img_ref = load_image(ref_image_path)
-    img_cur = load_image(cur_image_path)
+    if single_image_path is not None:
+        print(f"Single image mode selected: {single_image_path}")
+        print(f"Applying synthetic transform: Rotation={angle_deg}°, Scale={scale}, Tx={tx}px, Ty={ty}px")
+        img_raw = load_image(single_image_path)
+        synth_gen = SyntheticTransformGenerator(
+            angle_deg=angle_deg, scale=scale, tx=tx, ty=ty
+        )
+        img_ref, img_cur, ground_truth_H = synth_gen.apply(img_raw)
+    else:
+        if ref_image_path is None:
+            ref_image_path = Path("src/assets/vaso_1.jpeg")
+        if cur_image_path is None:
+            cur_image_path = Path("src/assets/vaso_2.jpeg")
+
+        print(f"Loading reference image: {ref_image_path}")
+        print(f"Loading current image:   {cur_image_path}")
+        img_ref = load_image(ref_image_path)
+        img_cur = load_image(cur_image_path)
 
     print("Executing pipeline...")
     context = pipeline.run(img_ref, img_cur)
 
-    metrics = compute_pipeline_metrics(context)
+    metrics = compute_pipeline_metrics(context, ground_truth_H=ground_truth_H)
 
     print("\n" + "=" * 50)
     print("           PIPELINE EXECUTION METRICS")
@@ -55,6 +72,8 @@ def run_single_experiment(
     print(f"Matches count:        {metrics['matches_count']}")
     print(f"Inliers count:        {metrics['inliers_count']} ({metrics['inlier_ratio_pct']}%)")
     print(f"Stop Layer:           {metrics['stop_layer']}")
+    if metrics.get('corner_error_px') is not None:
+        print(f"Corner Error (px):    {metrics['corner_error_px']} px (Ground Truth)")
     print(f"Servoing Error Norm:  {metrics['servoing_error_norm']}")
     print(f"Total Time (sec):     {metrics['total_time_sec']}s")
     print("Step Breakdown:")
@@ -85,12 +104,22 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, default="config/pipeline_default.yaml", help="Path to YAML config file")
     parser.add_argument("--ref", type=str, default="src/assets/vaso_1.jpeg", help="Path to reference image")
     parser.add_argument("--cur", type=str, default="src/assets/vaso_2.jpeg", help="Path to current image")
+    parser.add_argument("--single", type=str, default=None, help="Path to a single image for synthetic ground truth evaluation")
+    parser.add_argument("--angle", type=float, default=10.0, help="Rotation angle in degrees for synthetic warp")
+    parser.add_argument("--scale", type=float, default=1.0, help="Scale factor for synthetic warp")
+    parser.add_argument("--tx", type=float, default=20.0, help="Horizontal translation (px) for synthetic warp")
+    parser.add_argument("--ty", type=float, default=-15.0, help="Vertical translation (px) for synthetic warp")
     parser.add_argument("--output", type=str, default=None, help="Output directory for results")
 
     args = parser.parse_args()
     run_single_experiment(
         config_path=Path(args.config),
-        ref_image_path=Path(args.ref),
-        cur_image_path=Path(args.cur),
+        ref_image_path=Path(args.ref) if args.ref else None,
+        cur_image_path=Path(args.cur) if args.cur else None,
+        single_image_path=Path(args.single) if args.single else None,
+        angle_deg=args.angle,
+        scale=args.scale,
+        tx=args.tx,
+        ty=args.ty,
         output_dir=Path(args.output) if args.output else None,
     )

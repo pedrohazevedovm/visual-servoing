@@ -1,0 +1,25 @@
+{
+  "matches_count": 386,
+  "inliers_count": 95,
+  "inlier_ratio_pct": 24.61,
+  "stop_layer": 7,
+  "corner_error_px": null,
+  "servoing_error_norm": 34.043034,
+  "servoing_error_vector": [
+    -0.022744417190551758,
+    0.06099444255232811,
+    -21.295265197753906,
+    -0.02526538074016571,
+    -0.012315332889556885,
+    26.560022354125977,
+    -2.5278222892666236e-06,
+    3.251464295317419e-05
+  ],
+  "total_time_sec": 1.1611,
+  "step_times": {
+    "bilateral_filter": 0.0645,
+    "edge_detection": 0.0122,
+    "superpixel_reduction": 0.6123,
+    "feature_matching": 0.4722
+  }
+}

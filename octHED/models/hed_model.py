@@ -221,8 +221,9 @@ class HED(nn.Module):
         fuse = self.score_final(
             fuse_cat
         )  # Shape: [batch_size, 1, image_h, image_w].
-        results = [crop1, crop2, crop3, crop4, crop5, fuse]
-        results = [torch.sigmoid(r) for r in results]
+        # results = [crop1, crop2, crop3, crop4, crop5, fuse]
+        # results = [torch.sigmoid(r) for r in results]
+        results = torch.sigmoid(fuse)
         return results
 
 

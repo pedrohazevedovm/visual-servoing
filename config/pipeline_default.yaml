@@ -1,6 +1,12 @@
 pipeline:
+  - type: "roi_crop"
+    enabled: false
+    params:
+      pct_w: 0.3
+      pct_h: 0.5
+
   - type: "histogram_matching"
-    enabled: true
+    enabled: false
     params: {}
 
   - type: "bilateral_filter"
@@ -21,17 +27,15 @@ pipeline:
     enabled: true
     params:
       algorithm: "boruvka" # Options: 'boruvka', 'slic', 'meanshift', 'none'
-      n_superpixels: 100
+      n_superpixels: 50
       compactness: 10.0
-
-  - type: "roi_crop"
-    enabled: true
-    params:
-      pct_w: 0.3
-      pct_h: 0.5
 
   - type: "feature_matching"
     enabled: true
     params:
-      max_num_keypoints: 2048
+      max_num_keypoints: 512
       filter_threshold: 0.1
+      depth_confidence: 0.80
+      width_confidence: 0.90
+      n_layers: 6
+      mp: false

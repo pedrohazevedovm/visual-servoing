@@ -11,12 +11,12 @@ from src.core.registry import register_step
 _octhed_predictor = None
 
 
-def get_octhed_predictor():
+def get_octhed_predictor(method: str):
     global _octhed_predictor
     if _octhed_predictor is None:
         from octHED.predict import Predictor
 
-        _octhed_predictor = Predictor()
+        _octhed_predictor = Predictor(model_path=method)
     return _octhed_predictor
 
 
@@ -25,7 +25,7 @@ class EdgeDetectionStep(BaseStep):
     """
     Step: Edge Detection (CE / OctHED)
     Extracts edge maps used to guide graph construction in superpixels.
-    Method options: 'canny', 'octhed', 'none'.
+    Method options: 'canny', 'octhed', 'hed', 'none'.
     """
 
     def __init__(
@@ -50,7 +50,17 @@ class EdgeDetectionStep(BaseStep):
         return cv2.Canny(img_np, self.threshold1, self.threshold2)
 
     def _octhed(self, tensor: torch.Tensor) -> np.ndarray:
-        predictor = get_octhed_predictor()
+        predictor = get_octhed_predictor(self.method)
+        img_np = (tensor.permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
+        img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        img_bgr = np.ascontiguousarray(img_bgr)
+
+        edge_tensor = predictor.predict(img_bgr, save=self.save_predictions)
+        edge_np = edge_tensor.squeeze().cpu().numpy()
+        return np.clip(edge_np * 255.0, 0, 255).astype(np.uint8)
+    
+    def _hed(self, tensor: torch.Tensor) -> np.ndarray:
+        predictor = get_octhed_predictor(self.method)
         img_np = (tensor.permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
         img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         img_bgr = np.ascontiguousarray(img_bgr)
@@ -63,9 +73,23 @@ class EdgeDetectionStep(BaseStep):
         if self.method == "canny":
             context.edge_map_ref = self._canny(context.img_ref_proc)
             context.edge_map_cur = self._canny(context.img_cur_proc)
-        elif self.method == "octhed":
-            context.edge_map_ref = self._octhed(context.img_ref_proc)
-            context.edge_map_cur = self._octhed(context.img_cur_proc)
+        elif self.method in ("octhed", "hed"):
+            predictor = get_octhed_predictor(self.method)
+
+            # Pass PyTorch RGB tensors directly (N=2, C=3, H, W) - Zero CPU/NumPy conversion before GPU
+            batch_tensors = torch.stack(
+                [context.img_ref_proc, context.img_cur_proc], dim=0
+            )
+
+            edge_tensors = predictor.predict_batch(
+                batch_tensors, save=self.save_predictions
+            )
+
+            edge_ref_np = edge_tensors[0].squeeze().cpu().numpy()
+            edge_cur_np = edge_tensors[1].squeeze().cpu().numpy()
+
+            context.edge_map_ref = np.clip(edge_ref_np * 255.0, 0, 255).astype(np.uint8)
+            context.edge_map_cur = np.clip(edge_cur_np * 255.0, 0, 255).astype(np.uint8)
         else:  # 'none'
             context.edge_map_ref = None
             context.edge_map_cur = None

@@ -1,0 +1,30 @@
+experiment_name: "gridsearch_superpixels_n_and_compactness"
+
+data:
+  ref_image: "src/assets/vaso_1.jpeg"
+  cur_image: "src/assets/vaso_2.jpeg"
+
+grid:
+  histogram_matching: [false]
+  bilateral_filter: [true]
+  edge_detection_method: ["octhed"]
+  superpixel_algorithm: ["boruvka"]
+  roi_enabled: [false]
+  n_superpixels: [10, 25, 50, 100, 200, 300]
+  compactness: [1.0, 5.0, 10.0, 20.0, 50.0]
+
+defaults:
+  bilateral_params:
+    d: 9
+    sigmaColor: 75.0
+    sigmaSpace: 75.0
+  roi_params:
+    pct_w: 0.3
+    pct_h: 0.5
+  feature_matching_params:
+    max_num_keypoints: 512
+    filter_threshold: 0.1
+    depth_confidence: 0.80
+    width_confidence: 0.90
+    n_layers: 6
+    mp: false

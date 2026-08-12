@@ -44,12 +44,14 @@ def build_pipeline_from_combo(combo: Dict[str, Any], defaults: Dict[str, Any]) -
     sp_algo = combo.get("superpixel_algorithm", "none")
     if sp_algo != "none":
         n_sp = combo.get("n_superpixels", 100)
+        comp = combo.get("compactness", 10.0)
         steps.append(
             StepRegistry.create(
                 "superpixel_reduction",
                 enabled=True,
                 algorithm=sp_algo,
                 n_superpixels=n_sp,
+                compactness=comp,
             )
         )
 
@@ -60,9 +62,14 @@ def build_pipeline_from_combo(combo: Dict[str, Any], defaults: Dict[str, Any]) -
 
     # 6. Feature Matching (always enabled)
     fm_params = defaults.get("feature_matching_params", {})
+    # Override any combo specific feature matching params if present
+    for k in ["max_num_keypoints", "filter_threshold", "depth_confidence", "width_confidence", "n_layers", "mp"]:
+        if k in combo:
+            fm_params[k] = combo[k]
+
     steps.append(StepRegistry.create("feature_matching", enabled=True, **fm_params))
 
-    return Pipeline(steps=steps)
+    return Pipeline(steps=steps, config=combo)
 
 
 def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):
@@ -118,6 +125,7 @@ def run_gridsearch_experiment(config_path: Path, output_dir: Path = None):
                 "inlier_ratio_pct": metrics["inlier_ratio_pct"],
                 "stop_layer": metrics["stop_layer"],
                 "servoing_error_norm": metrics["servoing_error_norm"],
+                "superpixel_time_sec": metrics.get("step_times", {}).get("superpixel_reduction", None),
                 "total_time_sec": metrics["total_time_sec"],
             }
         )

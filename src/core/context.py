@@ -44,6 +44,9 @@ class PipelineContext:
     # Timing metrics per step (step_name -> duration in seconds)
     step_times: Dict[str, float] = field(default_factory=dict)
 
+    # Pipeline configuration used for this run
+    config: Optional[Any] = None
+
     # Custom extra metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
 

@@ -7,10 +7,11 @@ data:
 grid:
   histogram_matching: [true, false]
   bilateral_filter: [true, false]
-  edge_detection_method: ["none", "canny", "octhed"]
+  edge_detection_method: ["none", "canny", "octhed", "hed"]
   superpixel_algorithm: ["none", "boruvka"]
   n_superpixels: [50, 100, 200]
-  roi_enabled: [true, false]
+  max_num_keypoints: [256, 512, 1024, 2048]
+  roi_enabled: [false]
 
 defaults:
   bilateral_params:
